@@ -1,9 +1,29 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { menu as defaultMenu } from './menu.js'
 import { supabase } from './supabaseClient.js'
 
 // Cache of the last menu fetched from Supabase, so the PWA still renders offline.
 const STORAGE_KEY = 'calista_menu_cache_v1'
+const ADMIN_PW_KEY = 'calista_admin_pw'
+
+const slugify = (s) =>
+  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item'
+
+// Bundled fallback menu (used before the DB responds / when offline).
+const seed = () => {
+  const categories = defaultMenu.map((c) => ({ id: slugify(c.category), name: c.category }))
+  const items = defaultMenu.flatMap((c) =>
+    c.items.map((i) => ({
+      id: i.id,
+      categoryId: slugify(c.category),
+      name: i.name,
+      desc: i.desc,
+      price: i.price,
+      image: i.image
+    }))
+  )
+  return { categories, items }
+}
 
 // Map Supabase rows -> the shape the app uses.
 const fromDb = (categories, items) => ({
@@ -18,29 +38,17 @@ const fromDb = (categories, items) => ({
   }))
 })
 
-const slugify = (s) =>
-  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item'
-
-const uniqueId = (existing, base) => {
-  if (!existing.find((e) => e.id === base)) return base
-  let n = 2
-  while (existing.find((e) => e.id === `${base}-${n}`)) n++
-  return `${base}-${n}`
-}
-
-const seed = () => {
-  const categories = defaultMenu.map((c) => ({ id: slugify(c.category), name: c.category }))
-  const items = defaultMenu.flatMap((c) =>
-    c.items.map((i) => ({
-      id: i.id,
-      categoryId: slugify(c.category),
-      name: i.name,
-      desc: i.desc,
-      price: i.price,
-      image: i.image
-    }))
-  )
-  return { categories, items }
+// POST an admin action to the write API, authorised with the stored password.
+async function apiWrite(action, payload = {}) {
+  const pw = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(ADMIN_PW_KEY)) || ''
+  const res = await fetch('/api/menu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-password': pw },
+    body: JSON.stringify({ action, ...payload })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+  return data
 }
 
 const MenuCtx = createContext(null)
@@ -57,96 +65,73 @@ export function MenuProvider({ children }) {
     return seed()
   })
 
-  // Load the shared menu from Supabase on mount; cache it for offline use.
-  // Falls back to the cached copy (or the bundled seed) if the DB is unreachable.
-  useEffect(() => {
-    let alive = true
-    async function load() {
-      if (!supabase) return
-      const [cats, its] = await Promise.all([
-        supabase.from('categories').select('id,name,sort_order').order('sort_order'),
-        supabase
-          .from('menu_items')
-          .select('id,category_id,name,description,price,image_url,sort_order')
-          .order('sort_order')
-      ])
-      // If the DB is unreachable or not yet seeded, keep the bundled seed menu.
-      if (!alive || cats.error || its.error || !cats.data || cats.data.length === 0) return
-      const next = fromDb(cats.data, its.data)
-      setState(next)
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      } catch {}
-    }
-    load()
-    return () => {
-      alive = false
-    }
+  // Fetch the shared menu from Supabase and cache it.
+  const refresh = useCallback(async () => {
+    if (!supabase) return
+    const [cats, its] = await Promise.all([
+      supabase.from('categories').select('id,name,sort_order').order('sort_order'),
+      supabase
+        .from('menu_items')
+        .select('id,category_id,name,description,price,image_url,sort_order')
+        .order('sort_order')
+    ])
+    // If the DB is unreachable or not yet seeded, keep the current (seed/cache) menu.
+    if (cats.error || its.error || !cats.data || cats.data.length === 0) return
+    const next = fromDb(cats.data, its.data)
+    setState(next)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    } catch {}
   }, [])
 
-  const addCategory = (name) => {
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  const addCategory = async (name) => {
     const trimmed = (name || '').trim()
     if (!trimmed) return null
-    const id = uniqueId(state.categories, slugify(trimmed))
-    setState((s) => ({ ...s, categories: [...s.categories, { id, name: trimmed }] }))
+    const { id } = await apiWrite('addCategory', { name: trimmed })
+    await refresh()
     return id
   }
 
-  const renameCategory = (id, name) => {
+  const renameCategory = async (id, name) => {
     const trimmed = (name || '').trim()
     if (!trimmed) return
-    setState((s) => ({
-      ...s,
-      categories: s.categories.map((c) => (c.id === id ? { ...c, name: trimmed } : c))
-    }))
+    await apiWrite('renameCategory', { id, name: trimmed })
+    await refresh()
   }
 
-  const deleteCategory = (id) => {
-    setState((s) => ({
-      categories: s.categories.filter((c) => c.id !== id),
-      items: s.items.filter((i) => i.categoryId !== id)
-    }))
+  const deleteCategory = async (id) => {
+    await apiWrite('deleteCategory', { id })
+    await refresh()
   }
 
-  const addItem = (categoryId, draft) => {
+  const addItem = async (categoryId, draft) => {
     const name = (draft.name || '').trim()
     if (!name || !categoryId) return null
-    const id = uniqueId(state.items, slugify(name))
-    const item = {
-      id,
-      categoryId,
-      name,
-      desc: (draft.desc || '').trim(),
-      price: Number(draft.price) || 0,
-      image: (draft.image || '').trim()
-    }
-    setState((s) => ({ ...s, items: [...s.items, item] }))
+    const { imageDataUrl, ...item } = draft
+    const { id } = await apiWrite('addItem', { categoryId, item, imageDataUrl })
+    await refresh()
     return id
   }
 
-  const updateItem = (id, patch) => {
-    setState((s) => ({
-      ...s,
-      items: s.items.map((i) =>
-        i.id === id
-          ? {
-              ...i,
-              ...patch,
-              name: patch.name !== undefined ? patch.name.trim() : i.name,
-              desc: patch.desc !== undefined ? patch.desc.trim() : i.desc,
-              price: patch.price !== undefined ? Number(patch.price) || 0 : i.price,
-              image: patch.image !== undefined ? patch.image.trim() : i.image
-            }
-          : i
-      )
-    }))
+  const updateItem = async (id, draft) => {
+    const { imageDataUrl, ...patch } = draft
+    await apiWrite('updateItem', { id, patch, imageDataUrl })
+    await refresh()
   }
 
-  const deleteItem = (id) => {
-    setState((s) => ({ ...s, items: s.items.filter((i) => i.id !== id) }))
+  const deleteItem = async (id) => {
+    await apiWrite('deleteItem', { id })
+    await refresh()
   }
 
-  const resetToDefault = () => setState(seed())
+  const resetToDefault = async () => {
+    await apiWrite('resetMenu')
+    await refresh()
+  }
 
   const grouped = useMemo(
     () =>
@@ -169,6 +154,7 @@ export function MenuProvider({ children }) {
         items: state.items,
         grouped,
         itemImageById,
+        refresh,
         addCategory,
         renameCategory,
         deleteCategory,

@@ -10,13 +10,30 @@ import { BRAND_LOGO_ID, BRAND_HERO_ID } from '../brand.js'
 
 const ADMIN_PASSWORD = 'calista2026'
 const SESSION_KEY = 'calista_admin_authed'
+const ADMIN_PW_KEY = 'calista_admin_pw'
 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
   if (!authed) {
-    return <Login onAuth={() => { sessionStorage.setItem(SESSION_KEY, '1'); setAuthed(true) }} />
+    return (
+      <Login
+        onAuth={(pw) => {
+          sessionStorage.setItem(SESSION_KEY, '1')
+          sessionStorage.setItem(ADMIN_PW_KEY, pw)
+          setAuthed(true)
+        }}
+      />
+    )
   }
-  return <Panel onLogout={() => { sessionStorage.removeItem(SESSION_KEY); setAuthed(false) }} />
+  return (
+    <Panel
+      onLogout={() => {
+        sessionStorage.removeItem(SESSION_KEY)
+        sessionStorage.removeItem(ADMIN_PW_KEY)
+        setAuthed(false)
+      }}
+    />
+  )
 }
 
 function Login({ onAuth }) {
@@ -24,7 +41,7 @@ function Login({ onAuth }) {
   const [err, setErr] = useState(false)
   const submit = (e) => {
     e.preventDefault()
-    if (pw === ADMIN_PASSWORD) onAuth()
+    if (pw === ADMIN_PASSWORD) onAuth(pw)
     else setErr(true)
   }
   return (
@@ -59,9 +76,13 @@ function Panel({ onLogout }) {
 
   const customImageCount = Object.keys(overrides).length
 
-  const handleResetMenu = () => {
-    if (confirm('Reset the menu to the default categories and items? Uploaded images are kept.')) {
-      resetToDefault()
+  const handleResetMenu = async () => {
+    if (confirm('Reset the whole menu to the default categories and items? This replaces the current menu for everyone.')) {
+      try {
+        await resetToDefault()
+      } catch (e) {
+        alert(e.message || 'Could not reset the menu.')
+      }
     }
   }
   const handleClearImages = () => {
@@ -102,7 +123,8 @@ function Panel({ onLogout }) {
         </div>
       </div>
       <p className="text-calista-ink/60 mb-10">
-        Everything you change here is saved in your browser and shows up on the public site immediately.
+        Menu changes are saved to the shared database and show on every device immediately. (Brand
+        logo/hero images are still saved only in this browser.)
       </p>
 
       <SettingsSection />
@@ -190,12 +212,22 @@ function BrandSlot({ id, label, hint, previewClassName }) {
 function MenuManager() {
   const { grouped, addCategory } = useMenu()
   const [newCat, setNewCat] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
 
-  const submitCategory = (e) => {
+  const submitCategory = async (e) => {
     e.preventDefault()
     if (!newCat.trim()) return
-    addCategory(newCat)
-    setNewCat('')
+    setBusy(true)
+    setErr(null)
+    try {
+      await addCategory(newCat)
+      setNewCat('')
+    } catch (e2) {
+      setErr(e2.message || 'Could not add category.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -203,19 +235,23 @@ function MenuManager() {
       <h2 className="font-display text-2xl text-calista-gold mb-4 border-b border-calista-ink/10 pb-2 flex items-center justify-between">
         <span>Menu</span>
       </h2>
-      <form onSubmit={submitCategory} className="flex gap-2 mb-8">
-        <input
-          value={newCat}
-          onChange={(e) => setNewCat(e.target.value)}
-          placeholder="New category name (e.g. Salads)"
-          className="flex-1 px-4 py-3 border border-calista-ink/20 rounded-lg focus:outline-none focus:border-calista-gold"
-        />
-        <button
-          type="submit"
-          className="px-5 py-3 bg-calista-ink text-calista-cream rounded-lg font-semibold hover:bg-calista-gold hover:text-calista-ink transition"
-        >
-          + Add category
-        </button>
+      <form onSubmit={submitCategory} className="mb-8">
+        <div className="flex gap-2">
+          <input
+            value={newCat}
+            onChange={(e) => setNewCat(e.target.value)}
+            placeholder="New category name (e.g. Salads)"
+            className="flex-1 px-4 py-3 border border-calista-ink/20 rounded-lg focus:outline-none focus:border-calista-gold"
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="px-5 py-3 bg-calista-ink text-calista-cream rounded-lg font-semibold hover:bg-calista-gold hover:text-calista-ink transition disabled:opacity-50"
+          >
+            {busy ? 'Adding…' : '+ Add category'}
+          </button>
+        </div>
+        {err && <p className="text-sm text-red-600 mt-2">{err}</p>}
       </form>
 
       {grouped.length === 0 && (
@@ -235,17 +271,27 @@ function CategoryBlock({ category }) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState(category.name)
 
-  const saveRename = (e) => {
+  const saveRename = async (e) => {
     e.preventDefault()
-    renameCategory(category.id, name)
-    setEditing(false)
+    try {
+      await renameCategory(category.id, name)
+      setEditing(false)
+    } catch (e2) {
+      alert(e2.message || 'Could not rename category.')
+    }
   }
-  const onDelete = () => {
+  const onDelete = async () => {
     const itemCount = category.items.length
     const msg = itemCount > 0
       ? `Delete "${category.name}" and its ${itemCount} item${itemCount === 1 ? '' : 's'}?`
       : `Delete "${category.name}"?`
-    if (confirm(msg)) deleteCategory(category.id)
+    if (confirm(msg)) {
+      try {
+        await deleteCategory(category.id)
+      } catch (e2) {
+        alert(e2.message || 'Could not delete category.')
+      }
+    }
   }
 
   return (
@@ -311,8 +357,14 @@ function ItemCard({ item }) {
     return <ItemForm mode="edit" item={item} onDone={() => setEditing(false)} />
   }
 
-  const onDelete = () => {
-    if (confirm(`Delete "${item.name}"?`)) deleteItem(item.id)
+  const onDelete = async () => {
+    if (confirm(`Delete "${item.name}"?`)) {
+      try {
+        await deleteItem(item.id)
+      } catch (e) {
+        alert(e.message || 'Could not delete item.')
+      }
+    }
   }
 
   return (
@@ -338,7 +390,6 @@ function ItemCard({ item }) {
 
 function ItemForm({ mode, item, categoryId, onDone }) {
   const { addItem, updateItem, deleteItem } = useMenu()
-  const { overrides, setImage, clearImage, getImage } = useImages()
   const fileRef = useRef(null)
   const [form, setForm] = useState(() => ({
     name: item?.name || '',
@@ -346,67 +397,68 @@ function ItemForm({ mode, item, categoryId, onDone }) {
     price: item?.price ?? '',
     image: item?.image || ''
   }))
+  const [pendingImage, setPendingImage] = useState(null) // staged data URL, uploaded on save
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
   const isEdit = mode === 'edit'
-  const previewId = isEdit ? item.id : null
-  const customPreview = previewId ? overrides[previewId] : null
 
   const handleField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const onUpload = async (e) => {
+  const onPickImage = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) { setErr('Please choose an image file.'); return }
-    setBusy(true); setErr(null)
+    setErr(null)
     try {
-      const dataUrl = await fileToResizedDataUrl(file)
-      let id = previewId
-      if (!isEdit) {
-        if (!form.name.trim()) { setErr('Enter a name first, then upload.'); setBusy(false); return }
-        id = addItem(categoryId, form)
-        if (id) setImage(id, dataUrl)
-        onDone()
-        return
-      }
-      setImage(id, dataUrl)
-    } catch { setErr('Could not read that image.') }
-    finally { setBusy(false) }
+      setPendingImage(await fileToResizedDataUrl(file))
+    } catch {
+      setErr('Could not read that image.')
+    }
   }
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (!form.name.trim()) { setErr('Name is required.'); return }
-    if (isEdit) {
-      updateItem(item.id, form)
-    } else {
-      addItem(categoryId, form)
+    setBusy(true); setErr(null)
+    try {
+      const draft = { ...form, imageDataUrl: pendingImage || undefined }
+      if (isEdit) await updateItem(item.id, draft)
+      else await addItem(categoryId, draft)
+      onDone()
+    } catch (e2) {
+      setErr(e2.message || 'Could not save. Check your connection and try again.')
+      setBusy(false)
     }
-    onDone()
   }
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (isEdit && confirm(`Delete "${item.name}"?`)) {
-      deleteItem(item.id)
-      onDone()
+      setBusy(true)
+      try {
+        await deleteItem(item.id)
+        onDone()
+      } catch (e2) {
+        setErr(e2.message || 'Could not delete.')
+        setBusy(false)
+      }
     }
   }
+
+  const previewSrc = pendingImage || form.image || ''
 
   return (
     <form onSubmit={submit} className="bg-calista-cream border-2 border-calista-gold/40 rounded-lg p-4 sm:col-span-2">
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="shrink-0">
-          {previewId ? (
+          {previewSrc ? (
             <img
-              src={getImage(previewId, form.image || '')}
+              src={previewSrc}
               alt=""
               className="w-28 h-28 object-cover rounded-md bg-white"
               onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
             />
-          ) : form.image ? (
-            <img src={form.image} alt="" className="w-28 h-28 object-cover rounded-md bg-white" />
           ) : (
             <div className="w-28 h-28 rounded-md bg-white flex items-center justify-center text-calista-ink/30 text-xs text-center px-2">
               No image
@@ -419,19 +471,24 @@ function ItemForm({ mode, item, categoryId, onDone }) {
               disabled={busy}
               className="text-xs px-3 py-1.5 bg-calista-ink text-calista-cream rounded-full disabled:opacity-50"
             >
-              {busy ? 'Uploading…' : customPreview ? 'Replace upload' : 'Upload image'}
+              {pendingImage ? 'Change photo' : 'Upload photo'}
             </button>
-            {isEdit && customPreview && (
+            {pendingImage && (
               <button
                 type="button"
-                onClick={() => clearImage(previewId)}
+                onClick={() => setPendingImage(null)}
                 className="text-xs px-3 py-1.5 border border-calista-ink/20 rounded-full hover:border-red-500 hover:text-red-600"
               >
-                Use URL/default
+                Remove new photo
               </button>
             )}
-            <input ref={fileRef} type="file" accept="image/*" onChange={onUpload} className="hidden" />
+            <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} className="hidden" />
           </div>
+          {pendingImage && (
+            <p className="text-[11px] text-calista-gold mt-1 w-28 leading-tight">
+              Uploads when you click {isEdit ? 'Save changes' : 'Add item'}.
+            </p>
+          )}
         </div>
 
         <div className="flex-1 space-y-3">
@@ -439,18 +496,18 @@ function ItemForm({ mode, item, categoryId, onDone }) {
           <Field label="Description" value={form.desc} onChange={handleField('desc')} textarea placeholder="Short, appetising description" />
           <div className="grid sm:grid-cols-2 gap-3">
             <Field label="Price (LKR)" type="number" min="0" step="50" value={form.price} onChange={handleField('price')} required />
-            <Field label="Image URL (optional fallback)" value={form.image} onChange={handleField('image')} placeholder="https://…" />
+            <Field label="Image URL (used if no photo uploaded)" value={form.image} onChange={handleField('image')} placeholder="https://…" />
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
           <div className="flex flex-wrap gap-2 pt-2">
-            <button type="submit" className="px-4 py-2 bg-calista-ink text-calista-cream rounded-full text-sm font-semibold">
-              {isEdit ? 'Save changes' : 'Add item'}
+            <button type="submit" disabled={busy} className="px-4 py-2 bg-calista-ink text-calista-cream rounded-full text-sm font-semibold disabled:opacity-50">
+              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add item'}
             </button>
-            <button type="button" onClick={onDone} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm">
+            <button type="button" onClick={onDone} disabled={busy} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm disabled:opacity-50">
               Cancel
             </button>
             {isEdit && (
-              <button type="button" onClick={onDelete} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm hover:border-red-500 hover:text-red-600 ml-auto">
+              <button type="button" onClick={onDelete} disabled={busy} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm hover:border-red-500 hover:text-red-600 ml-auto disabled:opacity-50">
                 Delete
               </button>
             )}
