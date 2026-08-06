@@ -1,0 +1,203 @@
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useImages } from '../imageStore.jsx'
+import { BRAND, BRAND_HERO_ID } from '../brand.js'
+
+const DEFAULT_HERO = 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1600&q=80'
+
+const KITCHEN_SHOTS = [
+  {
+    src: 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=1000&q=80',
+    alt: 'Hand-rolled pasta',
+    heading: 'Pasta, made by hand',
+    body: 'Rolled fresh each morning from local-milled flour and farm eggs. Every shape — pappardelle, gnocchi, ravioli — finished to order.'
+  },
+  {
+    src: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1000&q=80',
+    alt: 'Wood-fired pizza',
+    heading: 'Wood-fired in 90 seconds',
+    body: 'Our stone oven runs at 450°C — the secret to that blistered, smoky crust under San Marzano tomatoes and fior di latte.'
+  },
+  {
+    src: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1000&q=80',
+    alt: 'Restaurant interior',
+    heading: 'Built for an evening out',
+    body: 'A warm, candlelit room a short walk from the lagoon — equally at home for a quiet dinner or a long table with friends.'
+  },
+  {
+    src: 'https://images.unsplash.com/photo-1466637574441-749b8f19452f?w=1000&q=80',
+    alt: 'Fresh ingredients',
+    heading: 'Sourced from the coast',
+    body: 'We buy what\'s in season from growers and fishers along Sri Lanka\'s west coast — what arrives that morning shapes the specials board.'
+  },
+  {
+    src: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=1000&q=80',
+    alt: 'Chef plating a dish',
+    heading: 'Plated to order',
+    body: 'Nothing sits under a lamp. Every plate is composed when you order — sauces split, garnishes torn, finished at the pass.'
+  },
+  {
+    src: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=1000&q=80',
+    alt: 'Dessert',
+    heading: 'Sweet endings, made in-house',
+    body: 'Tiramisu set in the morning, panna cotta wobbling at room temperature, gelato churned in small batches the same day.'
+  }
+]
+
+const ROTATE_MS = 6000
+
+export default function Home() {
+  const { getImage } = useImages()
+  const navigate = useNavigate()
+  const hero = getImage(BRAND_HERO_ID, DEFAULT_HERO)
+
+  const startOrder = (mode) => {
+    sessionStorage.setItem('calista_fulfillment', mode)
+    navigate('/menu')
+  }
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * KITCHEN_SHOTS.length))
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIdx((i) => (i + 1) % KITCHEN_SHOTS.length)
+    }, ROTATE_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  const shot = KITCHEN_SHOTS[idx]
+
+  return (
+    <>
+      <section className="relative text-calista-cream overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${hero})` }}
+        />
+        <div className="absolute inset-0 bg-calista-ink/45" />
+        <div className="relative max-w-5xl mx-auto px-4 py-24 sm:py-32 text-center">
+          <p className="text-calista-gold uppercase tracking-[0.3em] text-xs mb-4">
+            Italian · Modern · Negombo
+          </p>
+          <h1 className="font-display text-5xl sm:text-7xl mb-6">Welcome to {BRAND.name}</h1>
+          <p className="max-w-xl mx-auto text-calista-cream/90 mb-8">
+            Hand-rolled pasta, wood-fired pizza, and seasonal dishes from our kitchen to your table — at the restaurant in Kochchikade, or at your door.
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <Link
+              to="/menu"
+              className="bg-calista-gold text-calista-ink px-6 py-3 rounded-full font-semibold hover:bg-calista-cream transition"
+            >
+              Order Online
+            </Link>
+            <a
+              href={BRAND.phoneHref}
+              className="border border-calista-cream/40 px-6 py-3 rounded-full font-semibold hover:border-calista-cream transition"
+            >
+              Call us
+            </a>
+            <a
+              href={BRAND.whatsappHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-[#25D366] text-white px-6 py-3 rounded-full font-semibold hover:opacity-90 transition"
+            >
+              WhatsApp
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section className="max-w-5xl mx-auto px-4 py-16 grid sm:grid-cols-3 gap-6">
+        {[
+          {
+            t: 'Pickup',
+            d: 'Order ahead, skip the wait. Ready in 20 minutes.',
+            cta: 'Order for pickup →',
+            onClick: () => startOrder('pickup')
+          },
+          {
+            t: 'Delivery',
+            d: 'Hot food brought to your door across Negombo & Kochchikade.',
+            cta: 'Order for delivery →',
+            onClick: () => startOrder('delivery')
+          },
+          {
+            t: 'Dine In',
+            d: 'Book a table — walk-ins welcome at the bar.',
+            cta: 'Call to book →',
+            href: BRAND.phoneHref
+          }
+        ].map((card) => {
+          const inner = (
+            <>
+              <h3 className="font-display text-2xl mb-2">{card.t}</h3>
+              <p className="text-calista-ink/70 text-sm flex-1">{card.d}</p>
+              <span className="mt-4 text-calista-gold font-semibold text-sm group-hover:underline underline-offset-4">
+                {card.cta}
+              </span>
+            </>
+          )
+          const cls =
+            'group flex flex-col text-center p-6 border border-calista-ink/10 rounded-lg bg-white hover:border-calista-gold hover:shadow-md transition cursor-pointer'
+          return card.href ? (
+            <a key={card.t} href={card.href} className={cls}>
+              {inner}
+            </a>
+          ) : (
+            <button key={card.t} type="button" onClick={card.onClick} className={cls}>
+              {inner}
+            </button>
+          )
+        })}
+      </section>
+
+      <section className="bg-white border-y border-calista-ink/10">
+        <div className="max-w-5xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-10 items-center">
+          <div key={`txt-${idx}`} className="fade-in">
+            <p className="text-calista-gold uppercase tracking-[0.25em] text-xs mb-3">From our kitchen</p>
+            <h2 className="font-display text-3xl sm:text-4xl mb-4">{shot.heading}</h2>
+            <p className="text-calista-ink/70 mb-6">{shot.body}</p>
+            <Link to="/menu" className="text-calista-gold font-semibold underline underline-offset-4">
+              See the full menu →
+            </Link>
+            <div className="flex gap-1.5 mt-6">
+              {KITCHEN_SHOTS.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setIdx(i)}
+                  aria-label={`Show kitchen shot ${i + 1}`}
+                  className={`h-1.5 rounded-full transition-all ${
+                    i === idx ? 'w-8 bg-calista-gold' : 'w-3 bg-calista-ink/20 hover:bg-calista-ink/40'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+          <img
+            key={`img-${idx}`}
+            src={shot.src}
+            alt={shot.alt}
+            loading="lazy"
+            className="rounded-lg shadow-lg w-full h-72 object-cover fade-in"
+            onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+          />
+        </div>
+      </section>
+
+      <section className="max-w-5xl mx-auto px-4 py-16 text-center">
+        <h2 className="font-display text-3xl mb-4">Find us</h2>
+        <p className="text-calista-ink/70">
+          {BRAND.address}<br />
+          {BRAND.addressLine2}
+        </p>
+        <p className="mt-4">
+          <a href={BRAND.phoneHref} className="text-calista-gold font-semibold">{BRAND.phone}</a>
+          <span className="text-calista-ink/30 mx-3">·</span>
+          <a href={BRAND.whatsappHref} target="_blank" rel="noopener noreferrer" className="text-calista-gold font-semibold">
+            WhatsApp {BRAND.whatsapp}
+          </a>
+        </p>
+      </section>
+    </>
+  )
+}
