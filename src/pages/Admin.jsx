@@ -8,7 +8,6 @@ import { useCustomers } from '../customerStore.jsx'
 import { formatLKR } from '../format.js'
 import { BRAND_LOGO_ID, BRAND_HERO_ID } from '../brand.js'
 
-const ADMIN_PASSWORD = 'calista2026'
 const SESSION_KEY = 'calista_admin_authed'
 const ADMIN_PW_KEY = 'calista_admin_pw'
 
@@ -38,11 +37,30 @@ export default function Admin() {
 
 function Login({ onAuth }) {
   const [pw, setPw] = useState('')
-  const [err, setErr] = useState(false)
-  const submit = (e) => {
+  const [err, setErr] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const submit = async (e) => {
     e.preventDefault()
-    if (pw === ADMIN_PASSWORD) onAuth(pw)
-    else setErr(true)
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+      })
+      if (res.ok) {
+        onAuth(pw)
+      } else if (res.status === 401) {
+        setErr('Incorrect password.')
+      } else {
+        setErr('Could not sign in. Please try again.')
+      }
+    } catch {
+      setErr('Could not connect. Check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
   }
   return (
     <div className="max-w-md mx-auto px-4 py-20">
@@ -54,17 +72,17 @@ function Login({ onAuth }) {
             type="password"
             value={pw}
             autoFocus
-            onChange={(e) => { setPw(e.target.value); setErr(false) }}
+            onChange={(e) => { setPw(e.target.value); setErr(null) }}
             className="w-full px-4 py-3 border border-calista-ink/20 rounded-lg focus:outline-none focus:border-calista-gold"
           />
         </label>
-        {err && <p className="text-sm text-red-600">Incorrect password.</p>}
-        <button className="w-full bg-calista-ink text-calista-cream py-3 rounded-full font-semibold">
-          Sign in
+        {err && <p className="text-sm text-red-600">{err}</p>}
+        <button
+          disabled={busy || !pw}
+          className="w-full bg-calista-ink text-calista-cream py-3 rounded-full font-semibold disabled:opacity-50"
+        >
+          {busy ? 'Signing in…' : 'Sign in'}
         </button>
-        <p className="text-xs text-calista-ink/50 text-center">
-          Demo password: <code className="bg-calista-cream px-1 rounded">calista2026</code>. Replace with real auth before going live.
-        </p>
       </form>
     </div>
   )
