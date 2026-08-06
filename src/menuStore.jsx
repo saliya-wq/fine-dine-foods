@@ -70,7 +70,8 @@ export function MenuProvider({ children }) {
           .select('id,category_id,name,description,price,image_url,sort_order')
           .order('sort_order')
       ])
-      if (!alive || cats.error || its.error || !cats.data) return
+      // If the DB is unreachable or not yet seeded, keep the bundled seed menu.
+      if (!alive || cats.error || its.error || !cats.data || cats.data.length === 0) return
       const next = fromDb(cats.data, its.data)
       setState(next)
       try {
