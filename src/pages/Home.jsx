@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useImages } from '../imageStore.jsx'
 import { BRAND, BRAND_HERO_ID } from '../brand.js'
 
@@ -46,18 +46,9 @@ const KITCHEN_SHOTS = [
 
 const ROTATE_MS = 6000
 
-// Set to true to show the Pickup / Delivery / Dine In service cards on the home page.
-const SHOW_SERVICE_CARDS = false
-
 export default function Home() {
   const { getImage } = useImages()
-  const navigate = useNavigate()
   const hero = getImage(BRAND_HERO_ID, DEFAULT_HERO)
-
-  const startOrder = (mode) => {
-    sessionStorage.setItem('calista_fulfillment', mode)
-    navigate('/menu')
-  }
   const [idx, setIdx] = useState(() => Math.floor(Math.random() * KITCHEN_SHOTS.length))
 
   useEffect(() => {
@@ -110,51 +101,18 @@ export default function Home() {
         </div>
       </section>
 
-      {SHOW_SERVICE_CARDS && (
       <section className="max-w-5xl mx-auto px-4 py-16 grid sm:grid-cols-3 gap-6">
         {[
-          {
-            t: 'Pickup',
-            d: 'Order ahead, skip the wait. Ready in 20 minutes.',
-            cta: 'Order for pickup →',
-            onClick: () => startOrder('pickup')
-          },
-          {
-            t: 'Delivery',
-            d: 'Hot food brought to your door across Negombo & Kochchikade.',
-            cta: 'Order for delivery →',
-            onClick: () => startOrder('delivery')
-          },
-          {
-            t: 'Dine In',
-            d: 'Book a table — walk-ins welcome at the bar.',
-            cta: 'Call to book →',
-            href: BRAND.phoneHref
-          }
-        ].map((card) => {
-          const inner = (
-            <>
-              <h3 className="font-display text-2xl mb-2">{card.t}</h3>
-              <p className="text-calista-ink/70 text-sm flex-1">{card.d}</p>
-              <span className="mt-4 text-calista-gold font-semibold text-sm group-hover:underline underline-offset-4">
-                {card.cta}
-              </span>
-            </>
-          )
-          const cls =
-            'group flex flex-col text-center p-6 border border-calista-ink/10 rounded-lg bg-white hover:border-calista-gold hover:shadow-md transition cursor-pointer'
-          return card.href ? (
-            <a key={card.t} href={card.href} className={cls}>
-              {inner}
-            </a>
-          ) : (
-            <button key={card.t} type="button" onClick={card.onClick} className={cls}>
-              {inner}
-            </button>
-          )
-        })}
+          { t: 'Pickup', d: 'Order ahead, skip the wait. Ready in 20 minutes.' },
+          { t: 'Delivery', d: 'Hot food brought to your door across Negombo & Kochchikade.' },
+          { t: 'Dine In', d: 'Book a table — walk-ins welcome at the bar.' }
+        ].map((card) => (
+          <div key={card.t} className="text-center p-6 border border-calista-ink/10 rounded-lg bg-white">
+            <h3 className="font-display text-2xl mb-2">{card.t}</h3>
+            <p className="text-calista-ink/70 text-sm">{card.d}</p>
+          </div>
+        ))}
       </section>
-      )}
 
       <section className="bg-white border-y border-calista-ink/10">
         <div className="max-w-5xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-10 items-center">
