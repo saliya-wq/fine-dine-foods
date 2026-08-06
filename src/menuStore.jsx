@@ -1,7 +1,22 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { menu as defaultMenu } from './menu.js'
+import { supabase } from './supabaseClient.js'
 
-const STORAGE_KEY = 'calista_menu_v1'
+// Cache of the last menu fetched from Supabase, so the PWA still renders offline.
+const STORAGE_KEY = 'calista_menu_cache_v1'
+
+// Map Supabase rows -> the shape the app uses.
+const fromDb = (categories, items) => ({
+  categories: categories.map((c) => ({ id: c.id, name: c.name })),
+  items: (items || []).map((i) => ({
+    id: i.id,
+    categoryId: i.category_id,
+    name: i.name,
+    desc: i.description || '',
+    price: i.price || 0,
+    image: i.image_url || ''
+  }))
+})
 
 const slugify = (s) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item'
@@ -42,13 +57,31 @@ export function MenuProvider({ children }) {
     return seed()
   })
 
+  // Load the shared menu from Supabase on mount; cache it for offline use.
+  // Falls back to the cached copy (or the bundled seed) if the DB is unreachable.
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    } catch (err) {
-      console.warn('Could not save menu to localStorage.', err)
+    let alive = true
+    async function load() {
+      if (!supabase) return
+      const [cats, its] = await Promise.all([
+        supabase.from('categories').select('id,name,sort_order').order('sort_order'),
+        supabase
+          .from('menu_items')
+          .select('id,category_id,name,description,price,image_url,sort_order')
+          .order('sort_order')
+      ])
+      if (!alive || cats.error || its.error || !cats.data) return
+      const next = fromDb(cats.data, its.data)
+      setState(next)
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      } catch {}
     }
-  }, [state])
+    load()
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const addCategory = (name) => {
     const trimmed = (name || '').trim()
