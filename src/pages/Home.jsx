@@ -77,12 +77,11 @@ export default function Home() {
             Hand-rolled pasta, wood-fired pizza, and seasonal dishes from our kitchen to your table — at the restaurant in Kochchikade, or at your door.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
-            <Link
-              to="/menu"
-              className="bg-calista-gold text-calista-ink px-6 py-3 rounded-full font-semibold hover:bg-calista-cream transition"
+            <span
+              className="bg-calista-gold text-calista-ink px-6 py-3 rounded-full font-semibold opacity-90 cursor-default select-none"
             >
               Order Online
-            </Link>
+            </span>
             <a
               href={BRAND.phoneHref}
               className="border border-calista-cream/40 px-6 py-3 rounded-full font-semibold hover:border-calista-cream transition"
