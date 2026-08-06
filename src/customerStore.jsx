@@ -21,6 +21,14 @@ export const greetingForNow = () => {
   return 'Good evening'
 }
 
+// Trailing time-of-day phrase, e.g. "…glad you joined us this morning / this afternoon / tonight".
+export const dayPartPhrase = () => {
+  const h = new Date().getHours()
+  if (h < 12) return 'this morning'
+  if (h < 17) return 'this afternoon'
+  return 'tonight'
+}
+
 async function api(action, payload = {}, useAdmin = false) {
   const headers = { 'Content-Type': 'application/json' }
   if (useAdmin) headers['x-admin-password'] = sessionStorage.getItem(ADMIN_PW_KEY) || ''

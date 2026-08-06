@@ -4,7 +4,7 @@ import { useCart } from '../cart.jsx'
 import { useImages } from '../imageStore.jsx'
 import { useMenu } from '../menuStore.jsx'
 import { useTable } from '../tableSession.jsx'
-import { useCustomers, normalizePhone, greetingForNow } from '../customerStore.jsx'
+import { useCustomers, normalizePhone, greetingForNow, dayPartPhrase } from '../customerStore.jsx'
 import { useSettings, getTier } from '../settingsStore.jsx'
 import { formatLKR } from '../format.js'
 import { BRAND } from '../brand.js'
@@ -280,7 +280,7 @@ function Greeting({ customer, tiers, onContinue }) {
       </p>
       {isNew ? (
         <p className="text-calista-ink/70">
-          Welcome to {BRAND.name}. We're glad you joined us tonight.
+          Welcome to {BRAND.name}. We're glad you joined us {dayPartPhrase()}.
         </p>
       ) : (
         <p className="text-calista-ink/70">
