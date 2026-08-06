@@ -46,6 +46,9 @@ const KITCHEN_SHOTS = [
 
 const ROTATE_MS = 6000
 
+// Set to true to show the Pickup / Delivery / Dine In service cards on the home page.
+const SHOW_SERVICE_CARDS = false
+
 export default function Home() {
   const { getImage } = useImages()
   const navigate = useNavigate()
@@ -107,6 +110,7 @@ export default function Home() {
         </div>
       </section>
 
+      {SHOW_SERVICE_CARDS && (
       <section className="max-w-5xl mx-auto px-4 py-16 grid sm:grid-cols-3 gap-6">
         {[
           {
@@ -150,6 +154,7 @@ export default function Home() {
           )
         })}
       </section>
+      )}
 
       <section className="bg-white border-y border-calista-ink/10">
         <div className="max-w-5xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-10 items-center">
