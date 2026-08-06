@@ -49,6 +49,9 @@ create table if not exists customers (
   last_seen   timestamptz not null default now()
 );
 alter table customers enable row level security;
+-- Saved delivery details (auto-filled on the customer's next order).
+alter table customers add column if not exists address text;
+alter table customers add column if not exists location text;
 
 -- ── Promotions (Stage 3b) — public read, admin writes via api/promotions.js ─
 create table if not exists promotions (

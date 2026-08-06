@@ -79,12 +79,17 @@ export function CustomerProvider({ children }) {
     return customer || null
   }
 
-  const recordOrder = async (phone, amountSpent) => {
+  const recordOrder = async (phone, amountSpent, extra = {}) => {
     const p = normalizePhone(phone)
     if (!p) return
     try {
-      const { customer } = await api('recordOrder', { phone: p, amount: Number(amountSpent) || 0 })
-      // Keep the signed-in customer fresh (visit count / spend) for this session.
+      const { customer } = await api('recordOrder', {
+        phone: p,
+        amount: Number(amountSpent) || 0,
+        address: extra.address || '',
+        location: extra.location || ''
+      })
+      // Keep the signed-in customer fresh (visits/spend + saved address) for this session.
       if (customer && active?.phone === customer.phone) persistActive(customer)
     } catch (e) {
       console.warn('recordOrder failed', e)

@@ -13,7 +13,9 @@ const toCustomer = (r) =>
         visits: r.visits,
         totalSpent: r.total_spent,
         firstSeen: r.first_seen,
-        lastSeen: r.last_seen
+        lastSeen: r.last_seen,
+        address: r.address || '',
+        location: r.location || ''
       }
     : null
 
@@ -76,13 +78,19 @@ export default async function handler(req, res) {
         if (!phone) return res.status(400).json({ error: 'Invalid phone.' })
         const { data: existing } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle()
         if (!existing) return res.status(200).json({ customer: null })
+        const update = {
+          visits: existing.visits + 1,
+          total_spent: existing.total_spent + amount,
+          last_seen: new Date().toISOString()
+        }
+        // Remember delivery details for next time (only overwrite when provided).
+        const address = (body.address || '').trim()
+        const location = (body.location || '').trim()
+        if (address) update.address = address
+        if (location) update.location = location
         const { data, error } = await supabase
           .from('customers')
-          .update({
-            visits: existing.visits + 1,
-            total_spent: existing.total_spent + amount,
-            last_seen: new Date().toISOString()
-          })
+          .update(update)
           .eq('phone', phone)
           .select('*')
           .single()

@@ -28,7 +28,14 @@ export default function Checkout() {
   const [warning, setWarning] = useState(null)
   const [locating, setLocating] = useState(false)
   const [locationError, setLocationError] = useState(null)
-  const [form, setForm] = useState({ name: active?.name || '', phone: '', address: '', time: '', notes: '', location: '' })
+  const [form, setForm] = useState({
+    name: active?.name || '',
+    phone: '',
+    address: active?.address || '',
+    time: '',
+    notes: '',
+    location: active?.location || ''
+  })
 
   const shareLocation = () => {
     if (!navigator.geolocation) {
@@ -144,7 +151,7 @@ export default function Checkout() {
       }
     }
 
-    if (active) recordOrder(active.phone, totals.total)
+    if (active) recordOrder(active.phone, totals.total, { address: form.address, location: form.location })
     setPlaced(orderId)
     clear()
     setSubmitting(false)
@@ -358,6 +365,11 @@ export default function Checkout() {
               onChange={(v) => setForm((f) => ({ ...f, address: v }))}
               required
             />
+            {active?.address && (
+              <p className="-mt-2 text-xs text-calista-ink/50">
+                Saved from your last order — edit if it's changed.
+              </p>
+            )}
             <div>
               <span className="text-sm font-medium block mb-1">
                 Map location<span className="text-red-500"> *</span>
