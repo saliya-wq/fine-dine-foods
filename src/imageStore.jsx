@@ -1,33 +1,80 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from './supabaseClient.js'
 
-const STORAGE_KEY = 'calista_images_v1'
+const CACHE_KEY = 'calista_site_images_cache_v1'
+const ADMIN_PW_KEY = 'calista_admin_pw'
 const ImageCtx = createContext(null)
 
+async function apiWrite(action, payload = {}) {
+  const pw = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(ADMIN_PW_KEY)) || ''
+  const res = await fetch('/api/site-images', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-password': pw },
+    body: JSON.stringify({ action, ...payload })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+  return data
+}
+
 export function ImageProvider({ children }) {
+  // Map of site image id -> public URL (e.g. brand logo/hero). Shared via Supabase.
   const [overrides, setOverrides] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+      return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}')
     } catch {
       return {}
     }
   })
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides))
-    } catch (err) {
-      console.warn('Could not save images to localStorage — likely over quota.', err)
+    let alive = true
+    async function load() {
+      if (!supabase) return
+      const { data, error } = await supabase.from('site_images').select('id,url')
+      if (!alive || error || !data) return
+      const map = Object.fromEntries(data.map((r) => [r.id, r.url]))
+      setOverrides(map)
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(map))
+      } catch {}
     }
-  }, [overrides])
+    load()
+    return () => {
+      alive = false
+    }
+  }, [])
 
-  const setImage = (id, dataUrl) => setOverrides((o) => ({ ...o, [id]: dataUrl }))
-  const clearImage = (id) =>
+  const cache = (map) => {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(map))
+    } catch {}
+  }
+
+  const setImage = async (id, dataUrl) => {
+    const { url } = await apiWrite('set', { id, imageDataUrl: dataUrl })
+    setOverrides((o) => {
+      const next = { ...o, [id]: url }
+      cache(next)
+      return next
+    })
+  }
+
+  const clearImage = async (id) => {
+    await apiWrite('remove', { id })
     setOverrides((o) => {
       const next = { ...o }
       delete next[id]
+      cache(next)
       return next
     })
-  const clearAll = () => setOverrides({})
+  }
+
+  const clearAll = async () => {
+    await apiWrite('removeAll')
+    setOverrides({})
+    cache({})
+  }
 
   const getImage = (id, fallback) => overrides[id] || fallback
 

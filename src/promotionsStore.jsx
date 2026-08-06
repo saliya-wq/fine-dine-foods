@@ -1,50 +1,32 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { BRAND } from './brand.js'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { supabase } from './supabaseClient.js'
+import { promotionsSeed } from './promotionsSeed.js'
 
-const STORAGE_KEY = 'calista_promotions_v1'
+const STORAGE_KEY = 'calista_promotions_cache_v1'
+const ADMIN_PW_KEY = 'calista_admin_pw'
 
-const slugify = (s) =>
-  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'promo'
+const fromDb = (rows) =>
+  (rows || []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    description: r.description || '',
+    image: r.image_url || '',
+    startDate: r.start_date || '',
+    endDate: r.end_date || '',
+    url: r.url || ''
+  }))
 
-const uniqueId = (existing, base) => {
-  if (!existing.find((e) => e.id === base)) return base
-  let n = 2
-  while (existing.find((e) => e.id === `${base}-${n}`)) n++
-  return `${base}-${n}`
+async function apiWrite(action, payload = {}) {
+  const pw = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(ADMIN_PW_KEY)) || ''
+  const res = await fetch('/api/promotions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-password': pw },
+    body: JSON.stringify({ action, ...payload })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+  return data
 }
-
-const seed = () => [
-  {
-    id: 'aperitivo-hour',
-    title: 'Aperitivo Hour',
-    description:
-      'Every weekday from 5 – 7pm. Aperol spritzes, negronis, and our house Sicilian aperitivo plate at 25% off. Walk-in or call ahead to reserve a bar seat.',
-    image: 'https://images.unsplash.com/photo-1551538827-9c037cb4f32a?w=1000&q=80',
-    startDate: '2026-05-01',
-    endDate: '2026-07-31',
-    url: BRAND.facebook
-  },
-  {
-    id: 'sunday-brunch',
-    title: 'Sunday Sicilian Brunch',
-    description:
-      'Every Sunday, 11am – 3pm. Wood-fired focaccia, frittatas, fresh tropical fruit, and bottomless mimosas at Rs. 4,500 per person. Kids under 10 dine free with two paying adults.',
-    image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=1000&q=80',
-    startDate: '2026-05-15',
-    endDate: '2026-08-31',
-    url: ''
-  },
-  {
-    id: 'fathers-day',
-    title: "Father's Day Set Menu",
-    description:
-      "A four-course celebration menu for Father's Day weekend. Antipasto, hand-rolled pasta, your choice of main, and dessert at Rs. 7,800 per person. Booking essential — limited covers.",
-    image: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1000&q=80',
-    startDate: '2026-06-19',
-    endDate: '2026-06-21',
-    url: BRAND.facebook
-  }
-]
 
 const Ctx = createContext(null)
 
@@ -57,53 +39,52 @@ export function PromotionsProvider({ children }) {
         if (Array.isArray(parsed)) return parsed
       }
     } catch {}
-    return seed()
+    return promotionsSeed()
   })
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
+    if (!supabase) return
+    const { data, error } = await supabase
+      .from('promotions')
+      .select('id,title,description,image_url,start_date,end_date,url,sort_order')
+      .order('sort_order')
+    // Keep the seed/cache if the table is unreachable or empty.
+    if (error || !data || data.length === 0) return
+    const next = fromDb(data)
+    setItems(next)
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-    } catch (e) {
-      console.warn('Promotions: localStorage save failed', e)
-    }
-  }, [items])
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    } catch {}
+  }, [])
 
-  const add = (draft) => {
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  const add = async (draft) => {
     const title = (draft.title || '').trim()
     if (!title) return null
-    const id = uniqueId(items, slugify(title))
-    const p = {
-      id,
-      title,
-      description: (draft.description || '').trim(),
-      image: (draft.image || '').trim(),
-      startDate: draft.startDate || '',
-      endDate: draft.endDate || '',
-      url: (draft.url || '').trim()
-    }
-    setItems((prev) => [...prev, p])
+    const { imageDataUrl, ...rest } = draft
+    const { id } = await apiWrite('add', { draft: rest, imageDataUrl })
+    await refresh()
     return id
   }
 
-  const update = (id, patch) => {
-    setItems((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              ...patch,
-              title: patch.title !== undefined ? patch.title.trim() : p.title,
-              description: patch.description !== undefined ? patch.description.trim() : p.description,
-              image: patch.image !== undefined ? patch.image.trim() : p.image,
-              url: patch.url !== undefined ? patch.url.trim() : p.url
-            }
-          : p
-      )
-    )
+  const update = async (id, draft) => {
+    const { imageDataUrl, ...patch } = draft
+    await apiWrite('update', { id, patch, imageDataUrl })
+    await refresh()
   }
 
-  const remove = (id) => setItems((prev) => prev.filter((p) => p.id !== id))
-  const resetToDefault = () => setItems(seed())
+  const remove = async (id) => {
+    await apiWrite('remove', { id })
+    await refresh()
+  }
+
+  const resetToDefault = async () => {
+    await apiWrite('reset')
+    await refresh()
+  }
 
   return (
     <Ctx.Provider value={{ items, add, update, remove, resetToDefault }}>{children}</Ctx.Provider>

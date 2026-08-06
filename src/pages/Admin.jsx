@@ -85,8 +85,14 @@ function Panel({ onLogout }) {
       }
     }
   }
-  const handleClearImages = () => {
-    if (confirm('Remove all uploaded images (logo, hero, menu items)?')) clearImages()
+  const handleClearImages = async () => {
+    if (confirm('Remove the uploaded brand logo and hero image?')) {
+      try {
+        await clearImages()
+      } catch (e) {
+        alert(e.message || 'Could not clear images.')
+      }
+    }
   }
 
   return (
@@ -170,8 +176,8 @@ function BrandSlot({ id, label, hint, previewClassName }) {
     setBusy(true); setErr(null)
     try {
       const dataUrl = await fileToResizedDataUrl(file)
-      setImage(id, dataUrl)
-    } catch { setErr('Could not read that image.') }
+      await setImage(id, dataUrl)
+    } catch (e2) { setErr(e2.message || 'Could not save that image.') }
     finally { setBusy(false) }
   }
 
@@ -196,8 +202,14 @@ function BrandSlot({ id, label, hint, previewClassName }) {
             {busy ? 'Uploading…' : isCustom ? 'Replace' : 'Upload'}
           </button>
           {isCustom && (
-            <button onClick={() => clearImage(id)}
-              className="text-xs px-3 py-2 border border-calista-ink/20 rounded-full hover:border-red-500 hover:text-red-600">
+            <button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true); setErr(null)
+                try { await clearImage(id) } catch (e2) { setErr(e2.message || 'Could not remove.') }
+                finally { setBusy(false) }
+              }}
+              className="text-xs px-3 py-2 border border-calista-ink/20 rounded-full hover:border-red-500 hover:text-red-600 disabled:opacity-50">
               Revert
             </button>
           )}
@@ -544,8 +556,14 @@ function PromotionsManager() {
 
   const sorted = [...items].sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
 
-  const handleReset = () => {
-    if (confirm('Reset promotions back to the sample data? Your edits will be lost.')) resetToDefault()
+  const handleReset = async () => {
+    if (confirm('Reset promotions back to the sample data for everyone? Current promotions will be replaced.')) {
+      try {
+        await resetToDefault()
+      } catch (e) {
+        alert(e.message || 'Could not reset promotions.')
+      }
+    }
   }
 
   return (
@@ -593,8 +611,14 @@ function PromoCard({ promo }) {
 
   if (editing) return <PromoForm mode="edit" promo={promo} onDone={() => setEditing(false)} />
 
-  const onDelete = () => {
-    if (confirm(`Delete promotion "${promo.title}"?`)) remove(promo.id)
+  const onDelete = async () => {
+    if (confirm(`Delete promotion "${promo.title}"?`)) {
+      try {
+        await remove(promo.id)
+      } catch (e) {
+        alert(e.message || 'Could not delete promotion.')
+      }
+    }
   }
 
   const statusStyles = {
@@ -639,7 +663,6 @@ function PromoCard({ promo }) {
 
 function PromoForm({ mode, promo, onDone }) {
   const { add, update, remove } = usePromotions()
-  const { overrides, setImage, clearImage, getImage } = useImages()
   const fileRef = useRef(null)
   const [form, setForm] = useState(() => ({
     title: promo?.title || '',
@@ -649,67 +672,72 @@ function PromoForm({ mode, promo, onDone }) {
     endDate: promo?.endDate || '',
     url: promo?.url || ''
   }))
+  const [pendingImage, setPendingImage] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
   const isEdit = mode === 'edit'
-  const previewId = isEdit ? promo.id : null
-  const customPreview = previewId ? overrides[previewId] : null
 
   const handleField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const onUpload = async (e) => {
+  const onPickImage = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) { setErr('Please choose an image file.'); return }
-    setBusy(true); setErr(null)
+    setErr(null)
     try {
-      const dataUrl = await fileToResizedDataUrl(file)
-      if (!isEdit) {
-        if (!form.title.trim()) { setErr('Enter a title first, then upload.'); setBusy(false); return }
-        const id = add(form)
-        if (id) setImage(id, dataUrl)
-        onDone()
-        return
-      }
-      setImage(previewId, dataUrl)
-    } catch { setErr('Could not read that image.') }
-    finally { setBusy(false) }
+      setPendingImage(await fileToResizedDataUrl(file))
+    } catch {
+      setErr('Could not read that image.')
+    }
   }
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (!form.title.trim()) { setErr('Title is required.'); return }
     if (form.startDate && form.endDate && form.startDate > form.endDate) {
       setErr('End date must be on or after the start date.')
       return
     }
-    if (isEdit) update(promo.id, form)
-    else add(form)
-    onDone()
-  }
-
-  const onDelete = () => {
-    if (isEdit && confirm(`Delete promotion "${promo.title}"?`)) {
-      remove(promo.id)
+    setBusy(true); setErr(null)
+    try {
+      const draft = { ...form, imageDataUrl: pendingImage || undefined }
+      if (isEdit) await update(promo.id, draft)
+      else await add(draft)
       onDone()
+    } catch (e2) {
+      setErr(e2.message || 'Could not save. Try again.')
+      setBusy(false)
     }
   }
+
+  const onDelete = async () => {
+    if (isEdit && confirm(`Delete promotion "${promo.title}"?`)) {
+      setBusy(true)
+      try {
+        await remove(promo.id)
+        onDone()
+      } catch (e2) {
+        setErr(e2.message || 'Could not delete.')
+        setBusy(false)
+      }
+    }
+  }
+
+  const previewSrc = pendingImage || form.image || ''
 
   return (
     <form onSubmit={submit} className="bg-calista-cream border-2 border-calista-gold/40 rounded-lg p-4">
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="shrink-0">
-          {previewId ? (
+          {previewSrc ? (
             <img
-              src={getImage(previewId, form.image || '')}
+              src={previewSrc}
               alt=""
               className="w-28 h-28 object-cover rounded-md bg-white"
               onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
             />
-          ) : form.image ? (
-            <img src={form.image} alt="" className="w-28 h-28 object-cover rounded-md bg-white" />
           ) : (
             <div className="w-28 h-28 rounded-md bg-white flex items-center justify-center text-calista-ink/30 text-xs text-center px-2">
               No image
@@ -718,15 +746,15 @@ function PromoForm({ mode, promo, onDone }) {
           <div className="flex flex-col gap-1 mt-2">
             <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
               className="text-xs px-3 py-1.5 bg-calista-ink text-calista-cream rounded-full disabled:opacity-50">
-              {busy ? 'Uploading…' : customPreview ? 'Replace upload' : 'Upload image'}
+              {pendingImage ? 'Change photo' : 'Upload photo'}
             </button>
-            {isEdit && customPreview && (
-              <button type="button" onClick={() => clearImage(previewId)}
+            {pendingImage && (
+              <button type="button" onClick={() => setPendingImage(null)}
                 className="text-xs px-3 py-1.5 border border-calista-ink/20 rounded-full hover:border-red-500 hover:text-red-600">
-                Use URL/default
+                Remove new photo
               </button>
             )}
-            <input ref={fileRef} type="file" accept="image/*" onChange={onUpload} className="hidden" />
+            <input ref={fileRef} type="file" accept="image/*" onChange={onPickImage} className="hidden" />
           </div>
         </div>
 
@@ -738,19 +766,19 @@ function PromoForm({ mode, promo, onDone }) {
             <Field label="End date" type="date" value={form.endDate} onChange={handleField('endDate')} required />
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Image URL (optional fallback)" value={form.image} onChange={handleField('image')} placeholder="https://…" />
+            <Field label="Image URL (used if no photo uploaded)" value={form.image} onChange={handleField('image')} placeholder="https://…" />
             <Field label="Link URL (FB post, booking page)" value={form.url} onChange={handleField('url')} placeholder="https://facebook.com/…" />
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
           <div className="flex flex-wrap gap-2 pt-2">
-            <button type="submit" className="px-4 py-2 bg-calista-ink text-calista-cream rounded-full text-sm font-semibold">
-              {isEdit ? 'Save changes' : 'Add promotion'}
+            <button type="submit" disabled={busy} className="px-4 py-2 bg-calista-ink text-calista-cream rounded-full text-sm font-semibold disabled:opacity-50">
+              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add promotion'}
             </button>
-            <button type="button" onClick={onDone} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm">
+            <button type="button" onClick={onDone} disabled={busy} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm disabled:opacity-50">
               Cancel
             </button>
             {isEdit && (
-              <button type="button" onClick={onDelete} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm hover:border-red-500 hover:text-red-600 ml-auto">
+              <button type="button" onClick={onDelete} disabled={busy} className="px-4 py-2 border border-calista-ink/20 rounded-full text-sm hover:border-red-500 hover:text-red-600 ml-auto disabled:opacity-50">
                 Delete
               </button>
             )}

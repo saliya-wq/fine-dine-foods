@@ -50,6 +50,36 @@ create table if not exists customers (
 );
 alter table customers enable row level security;
 
+-- ── Promotions (Stage 3b) — public read, admin writes via api/promotions.js ─
+create table if not exists promotions (
+  id          text primary key,
+  title       text not null,
+  description text not null default '',
+  image_url   text not null default '',
+  start_date  date,
+  end_date    date,
+  url         text not null default '',
+  sort_order  int  not null default 0
+);
+alter table promotions enable row level security;
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename='promotions' and policyname='public_read_promotions') then
+    create policy public_read_promotions on promotions for select using (true);
+  end if;
+end $$;
+
+-- ── Site images (brand logo/hero) — public read, admin writes via api/site-images.js ─
+create table if not exists site_images (
+  id  text primary key,
+  url text not null
+);
+alter table site_images enable row level security;
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename='site_images' and policyname='public_read_site_images') then
+    create policy public_read_site_images on site_images for select using (true);
+  end if;
+end $$;
+
 -- ── Seed: categories ──────────────────────────────────────────────────────
 insert into categories (id, name, sort_order) values
   ('starters', 'Starters', 1),
