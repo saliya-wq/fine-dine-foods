@@ -37,6 +37,19 @@ insert into storage.buckets (id, name, public)
 values ('menu-images', 'menu-images', true)
 on conflict (id) do nothing;
 
+-- ── Customers (Stage 3) ───────────────────────────────────────────────────
+-- Private table: no public RLS policies. All access is via the server
+-- (service-role) through api/customers.js. lookup only returns one record.
+create table if not exists customers (
+  phone       text primary key,
+  name        text not null,
+  visits      int  not null default 0,
+  total_spent bigint not null default 0,
+  first_seen  timestamptz not null default now(),
+  last_seen   timestamptz not null default now()
+);
+alter table customers enable row level security;
+
 -- ── Seed: categories ──────────────────────────────────────────────────────
 insert into categories (id, name, sort_order) values
   ('starters', 'Starters', 1),

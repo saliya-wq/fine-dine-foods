@@ -135,8 +135,9 @@ function PhoneGate() {
   const [name, setName] = useState('')
   const [pendingCustomer, setPendingCustomer] = useState(null)
   const [err, setErr] = useState(null)
+  const [busy, setBusy] = useState(false)
 
-  const onPhoneSubmit = (e) => {
+  const onPhoneSubmit = async (e) => {
     e.preventDefault()
     const normalized = normalizePhone(phone)
     if (!normalized) {
@@ -144,29 +145,43 @@ function PhoneGate() {
       return
     }
     setErr(null)
-    const existing = lookup(normalized)
-    if (existing) {
-      setPendingCustomer(existing)
-      setStep('greeting')
-    } else {
-      setStep('name')
+    setBusy(true)
+    try {
+      const existing = await lookup(normalized)
+      if (existing) {
+        setPendingCustomer(existing)
+        setStep('greeting')
+      } else {
+        setStep('name')
+      }
+    } catch {
+      setErr('Could not connect. Please check your connection and try again.')
+    } finally {
+      setBusy(false)
     }
   }
 
-  const onNameSubmit = (e) => {
+  const onNameSubmit = async (e) => {
     e.preventDefault()
     if (!name.trim()) {
       setErr('Please enter your name.')
       return
     }
-    const created = create(phone, name)
-    if (!created) {
-      setErr('Could not save your details. Please try again.')
-      return
-    }
-    setPendingCustomer(created)
-    setStep('greeting')
     setErr(null)
+    setBusy(true)
+    try {
+      const created = await create(phone, name)
+      if (!created) {
+        setErr('Could not save your details. Please try again.')
+        return
+      }
+      setPendingCustomer(created)
+      setStep('greeting')
+    } catch {
+      setErr('Could not connect. Please check your connection and try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const onContinue = () => setActive(pendingCustomer)
@@ -198,9 +213,10 @@ function PhoneGate() {
             {err && <p className="text-sm text-red-600">{err}</p>}
             <button
               type="submit"
-              className="w-full bg-calista-ink text-calista-cream py-3 rounded-full font-semibold hover:bg-calista-gold hover:text-calista-ink transition"
+              disabled={busy}
+              className="w-full bg-calista-ink text-calista-cream py-3 rounded-full font-semibold hover:bg-calista-gold hover:text-calista-ink transition disabled:opacity-50"
             >
-              Continue
+              {busy ? 'Checking…' : 'Continue'}
             </button>
             <p className="text-xs text-calista-ink/50 text-center">
               We use your number to remember you and offer loyalty rewards.
@@ -235,9 +251,10 @@ function PhoneGate() {
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-calista-ink text-calista-cream py-3 rounded-full font-semibold hover:bg-calista-gold hover:text-calista-ink transition"
+                disabled={busy}
+                className="flex-1 bg-calista-ink text-calista-cream py-3 rounded-full font-semibold hover:bg-calista-gold hover:text-calista-ink transition disabled:opacity-50"
               >
-                Continue
+                {busy ? 'Saving…' : 'Continue'}
               </button>
             </div>
           </form>

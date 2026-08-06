@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useImages, fileToResizedDataUrl } from '../imageStore.jsx'
 import { useMenu } from '../menuStore.jsx'
@@ -915,15 +915,31 @@ function LoyaltyTiersEditor() {
 }
 
 function CustomersSection() {
-  const { list, remove } = useCustomers()
+  const { list, remove, refreshList } = useCustomers()
   const { loyaltyTiers } = useSettings()
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    refreshList()
+      .catch((e) => { if (alive) setErr(e.message || 'Could not load customers.') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sorted = [...list].sort((a, b) =>
     (b.lastSeen || '').localeCompare(a.lastSeen || '')
   )
 
-  const onDelete = (c) => {
-    if (confirm(`Delete customer ${c.name} (${c.phone})?`)) remove(c.phone)
+  const onDelete = async (c) => {
+    if (confirm(`Delete customer ${c.name} (${c.phone})?`)) {
+      try {
+        await remove(c.phone)
+      } catch (e) {
+        alert(e.message || 'Could not delete customer.')
+      }
+    }
   }
 
   const fmtDate = (iso) => {
@@ -934,10 +950,18 @@ function CustomersSection() {
   return (
     <section className="mb-12">
       <h2 className="font-display text-2xl text-calista-gold mb-4 border-b border-calista-ink/10 pb-2">
-        Customers ({list.length})
+        Customers ({loading ? '…' : list.length})
       </h2>
 
-      {list.length === 0 ? (
+      {err ? (
+        <div className="bg-white border border-red-200 rounded-lg p-6 text-center text-red-600">
+          {err}
+        </div>
+      ) : loading ? (
+        <div className="bg-white border border-calista-ink/10 rounded-lg p-6 text-center text-calista-ink/50">
+          Loading customers…
+        </div>
+      ) : list.length === 0 ? (
         <div className="bg-white border border-calista-ink/10 rounded-lg p-6 text-center text-calista-ink/60">
           No customers yet. They'll appear here when guests sign in at a table via QR code.
         </div>

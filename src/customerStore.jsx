@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 
-const DB_KEY = 'calista_customers_v1'
 const SESSION_KEY = 'calista_active_customer'
+const ADMIN_PW_KEY = 'calista_admin_pw'
 
 export const normalizePhone = (raw) => {
   const digits = String(raw || '').replace(/\D/g, '')
@@ -21,17 +21,22 @@ export const greetingForNow = () => {
   return 'Good evening'
 }
 
+async function api(action, payload = {}, useAdmin = false) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (useAdmin) headers['x-admin-password'] = sessionStorage.getItem(ADMIN_PW_KEY) || ''
+  const res = await fetch('/api/customers', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action, ...payload })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+  return data
+}
+
 const CustomerCtx = createContext(null)
 
 export function CustomerProvider({ children }) {
-  const [customers, setCustomers] = useState(() => {
-    try {
-      const raw = localStorage.getItem(DB_KEY)
-      if (raw) return JSON.parse(raw)
-    } catch {}
-    return {}
-  })
-
   const [active, setActiveState] = useState(() => {
     try {
       const raw = sessionStorage.getItem(SESSION_KEY)
@@ -41,85 +46,71 @@ export function CustomerProvider({ children }) {
     }
   })
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(DB_KEY, JSON.stringify(customers))
-    } catch (e) {
-      console.warn('Customer DB save failed', e)
-    }
-  }, [customers])
+  // Admin-only, loaded on demand by the admin panel.
+  const [list, setList] = useState([])
 
-  useEffect(() => {
+  const persistActive = (customer) => {
+    setActiveState(customer)
     try {
-      if (active) sessionStorage.setItem(SESSION_KEY, JSON.stringify(active))
+      if (customer) sessionStorage.setItem(SESSION_KEY, JSON.stringify(customer))
       else sessionStorage.removeItem(SESSION_KEY)
     } catch {}
-  }, [active])
-
-  const lookup = (phone) => {
-    const p = normalizePhone(phone)
-    return p ? customers[p] || null : null
   }
 
-  const create = (phone, name) => {
-    const p = normalizePhone(phone)
-    if (!p || !name?.trim()) return null
-    const now = new Date().toISOString()
-    const c = {
-      phone: p,
-      name: name.trim(),
-      visits: 0,
-      totalSpent: 0,
-      firstSeen: now,
-      lastSeen: now
-    }
-    setCustomers((prev) => ({ ...prev, [p]: c }))
-    return c
-  }
-
-  const recordOrder = (phone, amountSpent) => {
+  const lookup = async (phone) => {
     const p = normalizePhone(phone)
     if (!p) return null
-    setCustomers((prev) => {
-      const existing = prev[p]
-      if (!existing) return prev
-      return {
-        ...prev,
-        [p]: {
-          ...existing,
-          visits: existing.visits + 1,
-          totalSpent: existing.totalSpent + (Number(amountSpent) || 0),
-          lastSeen: new Date().toISOString()
-        }
-      }
-    })
+    const { customer } = await api('lookup', { phone: p })
+    return customer || null
   }
 
-  const remove = (phone) => {
+  const create = async (phone, name) => {
+    const p = normalizePhone(phone)
+    if (!p || !name?.trim()) return null
+    const { customer } = await api('create', { phone: p, name: name.trim() })
+    return customer || null
+  }
+
+  const recordOrder = async (phone, amountSpent) => {
     const p = normalizePhone(phone)
     if (!p) return
-    setCustomers((prev) => {
-      const next = { ...prev }
-      delete next[p]
-      return next
-    })
+    try {
+      const { customer } = await api('recordOrder', { phone: p, amount: Number(amountSpent) || 0 })
+      // Keep the signed-in customer fresh (visit count / spend) for this session.
+      if (customer && active?.phone === customer.phone) persistActive(customer)
+    } catch (e) {
+      console.warn('recordOrder failed', e)
+    }
   }
 
-  const setActive = (customer) => setActiveState(customer)
-  const clearActive = () => setActiveState(null)
+  const refreshList = async () => {
+    const { customers } = await api('list', {}, true)
+    setList(customers || [])
+    return customers || []
+  }
+
+  const remove = async (phone) => {
+    const p = normalizePhone(phone)
+    if (!p) return
+    await api('remove', { phone: p }, true)
+    await refreshList()
+  }
+
+  const setActive = (customer) => persistActive(customer)
+  const clearActive = () => persistActive(null)
 
   return (
     <CustomerCtx.Provider
       value={{
-        customers,
-        list: Object.values(customers),
+        list,
         active,
         setActive,
         clearActive,
         lookup,
         create,
         recordOrder,
-        remove
+        remove,
+        refreshList
       }}
     >
       {children}
