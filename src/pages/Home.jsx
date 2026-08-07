@@ -78,7 +78,7 @@ export default function Home() {
             Welcome{brand.name ? ` to ${brand.name}` : ''}
           </h1>
           <p className="max-w-xl mx-auto text-calista-cream/90 mb-8">
-            Hand-rolled pasta, wood-fired pizza, and seasonal dishes from our kitchen to your table — at the restaurant in Kochchikade, or at your door.
+            Hand-rolled pasta, wood-fired pizza, and seasonal dishes from our kitchen to your table — at the restaurant, or at your door.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
             <span className="bg-calista-gold text-calista-ink px-6 py-3 rounded-full font-semibold opacity-90 cursor-default select-none">
