@@ -12,6 +12,9 @@ import { useBrandStore } from '../brandStore.jsx'
 const SESSION_KEY = 'calista_admin_authed'
 const ADMIN_PW_KEY = 'calista_admin_pw'
 
+// Set to true to show the Settings section (Business details, Service charge, Loyalty tiers).
+const SHOW_SETTINGS = false
+
 export default function Admin() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
   if (!authed) {
@@ -152,7 +155,7 @@ function Panel({ onLogout }) {
         logo/hero images are still saved only in this browser.)
       </p>
 
-      <SettingsSection />
+      {SHOW_SETTINGS && <SettingsSection />}
 
       <h2 className="font-display text-2xl text-calista-gold mb-4 border-b border-calista-ink/10 pb-2">Brand</h2>
       <div className="grid sm:grid-cols-2 gap-4 mb-12">
