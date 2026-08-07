@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useImages } from '../imageStore.jsx'
-import { BRAND, BRAND_HERO_ID } from '../brand.js'
+import { BRAND_HERO_ID } from '../brand.js'
+import { useBrand } from '../brandStore.jsx'
 
 const DEFAULT_HERO = 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1600&q=80'
 
@@ -48,6 +49,7 @@ const ROTATE_MS = 6000
 
 export default function Home() {
   const { getImage } = useImages()
+  const brand = useBrand()
   const hero = getImage(BRAND_HERO_ID, DEFAULT_HERO)
   const [idx, setIdx] = useState(() => Math.floor(Math.random() * KITCHEN_SHOTS.length))
 
@@ -72,30 +74,34 @@ export default function Home() {
           <p className="text-calista-gold uppercase tracking-[0.3em] text-xs mb-4">
             Italian · Modern · Negombo
           </p>
-          <h1 className="font-display text-5xl sm:text-7xl mb-6">Welcome to {BRAND.name}</h1>
+          <h1 className="font-display text-5xl sm:text-7xl mb-6">
+            Welcome{brand.name ? ` to ${brand.name}` : ''}
+          </h1>
           <p className="max-w-xl mx-auto text-calista-cream/90 mb-8">
             Hand-rolled pasta, wood-fired pizza, and seasonal dishes from our kitchen to your table — at the restaurant in Kochchikade, or at your door.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
-            <span
-              className="bg-calista-gold text-calista-ink px-6 py-3 rounded-full font-semibold opacity-90 cursor-default select-none"
-            >
+            <span className="bg-calista-gold text-calista-ink px-6 py-3 rounded-full font-semibold opacity-90 cursor-default select-none">
               Order Online
             </span>
-            <a
-              href={BRAND.phoneHref}
-              className="border border-calista-cream/40 px-6 py-3 rounded-full font-semibold hover:border-calista-cream transition"
-            >
-              Call us
-            </a>
-            <a
-              href={BRAND.whatsappHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-[#25D366] text-white px-6 py-3 rounded-full font-semibold hover:opacity-90 transition"
-            >
-              WhatsApp
-            </a>
+            {brand.phoneHref && (
+              <a
+                href={brand.phoneHref}
+                className="border border-calista-cream/40 px-6 py-3 rounded-full font-semibold hover:border-calista-cream transition"
+              >
+                Call us
+              </a>
+            )}
+            {brand.whatsappHref && (
+              <a
+                href={brand.whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[#25D366] text-white px-6 py-3 rounded-full font-semibold hover:opacity-90 transition"
+              >
+                WhatsApp
+              </a>
+            )}
           </div>
         </div>
       </section>
@@ -146,20 +152,29 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="max-w-5xl mx-auto px-4 py-16 text-center">
-        <h2 className="font-display text-3xl mb-4">Find us</h2>
-        <p className="text-calista-ink/70">
-          {BRAND.address}<br />
-          {BRAND.addressLine2}
-        </p>
-        <p className="mt-4">
-          <a href={BRAND.phoneHref} className="text-calista-gold font-semibold">{BRAND.phone}</a>
-          <span className="text-calista-ink/30 mx-3">·</span>
-          <a href={BRAND.whatsappHref} target="_blank" rel="noopener noreferrer" className="text-calista-gold font-semibold">
-            WhatsApp {BRAND.whatsapp}
-          </a>
-        </p>
-      </section>
+      {(brand.address || brand.addressLine2 || brand.phone || brand.whatsapp) && (
+        <section className="max-w-5xl mx-auto px-4 py-16 text-center">
+          <h2 className="font-display text-3xl mb-4">Find us</h2>
+          {(brand.address || brand.addressLine2) && (
+            <p className="text-calista-ink/70">
+              {brand.address}
+              {brand.address && brand.addressLine2 && <br />}
+              {brand.addressLine2}
+            </p>
+          )}
+          <p className="mt-4">
+            {brand.phone && (
+              <a href={brand.phoneHref} className="text-calista-gold font-semibold">{brand.phone}</a>
+            )}
+            {brand.phone && brand.whatsapp && <span className="text-calista-ink/30 mx-3">·</span>}
+            {brand.whatsapp && (
+              <a href={brand.whatsappHref} target="_blank" rel="noopener noreferrer" className="text-calista-gold font-semibold">
+                WhatsApp {brand.whatsapp}
+              </a>
+            )}
+          </p>
+        </section>
+      )}
     </>
   )
 }

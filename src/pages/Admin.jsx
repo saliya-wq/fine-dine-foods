@@ -6,7 +6,8 @@ import { usePromotions, statusOf, formatDateRange } from '../promotionsStore.jsx
 import { useSettings, getTier } from '../settingsStore.jsx'
 import { useCustomers } from '../customerStore.jsx'
 import { formatLKR } from '../format.js'
-import { BRAND_LOGO_ID, BRAND_HERO_ID } from '../brand.js'
+import { BRAND_LOGO_ID, BRAND_HERO_ID, BRAND_FIELDS } from '../brand.js'
+import { useBrandStore } from '../brandStore.jsx'
 
 const SESSION_KEY = 'calista_admin_authed'
 const ADMIN_PW_KEY = 'calista_admin_pw'
@@ -813,9 +814,73 @@ function SettingsSection() {
       <h2 className="font-display text-2xl text-calista-gold mb-4 border-b border-calista-ink/10 pb-2">
         Settings
       </h2>
+      <h3 className="font-semibold text-sm mb-2 text-calista-ink/70">Business details</h3>
+      <BrandEditor />
       <ServiceChargeEditor />
       <LoyaltyTiersEditor />
     </section>
+  )
+}
+
+function BrandEditor() {
+  const { raw, saveBrand } = useBrandStore()
+  const [form, setForm] = useState(raw)
+  const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => { setForm(raw) }, [raw])
+
+  const onSave = async (e) => {
+    e.preventDefault()
+    setBusy(true); setErr(null); setSaved(false)
+    try {
+      await saveBrand(form)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    } catch (e2) {
+      setErr(e2.message || 'Could not save.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={onSave} className="bg-white border border-calista-ink/10 rounded-lg p-4 mb-4 space-y-3">
+      <p className="text-xs text-calista-ink/50">
+        Shown across the site — header, footer, home page, table QR sheets. Leave a field blank to hide it.
+      </p>
+      {BRAND_FIELDS.map((f) => (
+        <label key={f.key} className="block">
+          <span className="text-xs font-medium block mb-1 text-calista-ink/70">{f.label}</span>
+          {f.textarea ? (
+            <textarea
+              rows={2}
+              value={form[f.key] || ''}
+              placeholder={f.placeholder}
+              onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+              className="w-full px-3 py-2 border border-calista-ink/20 rounded-lg focus:outline-none focus:border-calista-gold bg-white text-sm"
+            />
+          ) : (
+            <input
+              type="text"
+              value={form[f.key] || ''}
+              placeholder={f.placeholder}
+              onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+              className="w-full px-3 py-2 border border-calista-ink/20 rounded-lg focus:outline-none focus:border-calista-gold bg-white text-sm"
+            />
+          )}
+        </label>
+      ))}
+      {err && <p className="text-sm text-red-600">{err}</p>}
+      <button
+        type="submit"
+        disabled={busy}
+        className="px-5 py-2 bg-calista-ink text-calista-cream rounded-full text-sm font-semibold hover:bg-calista-gold hover:text-calista-ink transition disabled:opacity-50"
+      >
+        {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save business details'}
+      </button>
+    </form>
   )
 }
 

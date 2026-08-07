@@ -9,13 +9,15 @@ import { PromotionsProvider } from './promotionsStore.jsx'
 import { TableProvider } from './tableSession.jsx'
 import { SettingsProvider } from './settingsStore.jsx'
 import { CustomerProvider } from './customerStore.jsx'
+import { BrandProvider } from './brandStore.jsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
-      <SettingsProvider>
-        <CustomerProvider>
+      <BrandProvider>
+        <SettingsProvider>
+          <CustomerProvider>
           <MenuProvider>
             <PromotionsProvider>
               <ImageProvider>
@@ -27,8 +29,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </ImageProvider>
             </PromotionsProvider>
           </MenuProvider>
-        </CustomerProvider>
-      </SettingsProvider>
+          </CustomerProvider>
+        </SettingsProvider>
+      </BrandProvider>
     </BrowserRouter>
   </React.StrictMode>
 )

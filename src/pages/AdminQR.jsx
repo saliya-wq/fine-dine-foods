@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
-import { BRAND } from '../brand.js'
+import { useBrand } from '../brandStore.jsx'
 
 const SESSION_KEY = 'calista_admin_authed'
 const COUNT_KEY = 'calista_table_count'
@@ -9,6 +9,7 @@ const BASE_KEY = 'calista_qr_base_url'
 
 export default function AdminQR() {
   const navigate = useNavigate()
+  const brand = useBrand()
   const authed = sessionStorage.getItem(SESSION_KEY) === '1'
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export default function AdminQR() {
               key={n}
               className="qr-card border-2 border-calista-ink/20 rounded-lg p-4 text-center bg-white break-inside-avoid"
             >
-              <p className="font-display text-xl mb-1">{BRAND.name}</p>
+              <p className="font-display text-xl mb-1">{brand.name || 'Your Restaurant'}</p>
               <p className="text-xs text-calista-ink/60 uppercase tracking-wider mb-3">
                 Table {n}
               </p>

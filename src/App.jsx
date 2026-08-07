@@ -12,11 +12,13 @@ import { useTable } from './tableSession.jsx'
 import { useCustomers } from './customerStore.jsx'
 import { useSettings, getTier, computeOrderTotals } from './settingsStore.jsx'
 import { formatLKR } from './format.js'
-import { BRAND, BRAND_LOGO_ID } from './brand.js'
+import { BRAND_LOGO_ID } from './brand.js'
+import { useBrand } from './brandStore.jsx'
 
 function Nav() {
   const { count } = useCart()
   const { getImage } = useImages()
+  const brand = useBrand()
   const logo = getImage(BRAND_LOGO_ID, null)
   const link = ({ isActive }) =>
     `px-3 py-2 text-sm font-medium transition ${
@@ -27,13 +29,13 @@ function Nav() {
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
           {logo ? (
-            <img src={logo} alt={BRAND.name} className="h-9 w-9 object-cover rounded-full bg-calista-cream" />
+            <img src={logo} alt={brand.name} className="h-9 w-9 object-cover rounded-full bg-calista-cream" />
           ) : (
             <span className="h-9 w-9 rounded-full bg-calista-gold text-calista-ink flex items-center justify-center font-display text-xl font-bold">
-              C
+              {brand.name ? brand.name[0].toUpperCase() : '•'}
             </span>
           )}
-          <span className="font-display text-2xl tracking-wide">{BRAND.name}</span>
+          <span className="font-display text-2xl tracking-wide">{brand.name || 'Your Restaurant'}</span>
         </Link>
         <nav className="flex items-center gap-1">
           <NavLink to="/" end className={link}>Home</NavLink>
@@ -74,53 +76,55 @@ function TableBanner() {
 }
 
 function Footer() {
+  const brand = useBrand()
+  const socialCls =
+    'w-9 h-9 rounded-full border border-calista-cream/30 flex items-center justify-center hover:border-calista-gold hover:text-calista-gold transition'
   return (
     <footer className="bg-calista-ink text-calista-cream/70 mt-12 no-print">
       <div className="max-w-5xl mx-auto px-4 py-10 text-sm grid sm:grid-cols-3 gap-6">
         <div>
-          <h3 className="font-display text-calista-cream text-xl mb-2">{BRAND.name}</h3>
-          <p className="mb-4">{BRAND.tagline}</p>
+          <h3 className="font-display text-calista-cream text-xl mb-2">{brand.name || 'Your Restaurant'}</h3>
+          {brand.tagline && <p className="mb-4">{brand.tagline}</p>}
           <div className="flex gap-3">
-            <a
-              href={BRAND.facebook}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Facebook"
-              className="w-9 h-9 rounded-full border border-calista-cream/30 flex items-center justify-center hover:border-calista-gold hover:text-calista-gold transition"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M13 22v-8h3l1-4h-4V7.5c0-1.1.4-2 2-2h2V2h-3c-3 0-5 1.8-5 5v3H6v4h3v8h4z"/></svg>
-            </a>
-            <a
-              href={BRAND.whatsappHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="WhatsApp"
-              className="w-9 h-9 rounded-full border border-calista-cream/30 flex items-center justify-center hover:border-calista-gold hover:text-calista-gold transition"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M20.5 3.5A11 11 0 0 0 3 17l-1 5 5.2-1.4A11 11 0 1 0 20.5 3.5zM12 20a8 8 0 0 1-4.1-1.1l-.3-.2-3.1.8.8-3-.2-.3A8 8 0 1 1 12 20zm4.4-5.6c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.5.1-.2.2-.6.8-.7.9-.1.2-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5l.4-.4c.1-.1.2-.3.2-.4 0-.2 0-.3-.1-.4-.1-.1-.5-1.3-.7-1.7-.2-.5-.4-.4-.5-.4h-.5c-.2 0-.4 0-.6.3-.2.2-.8.8-.8 2s.9 2.3 1 2.5c.1.2 1.8 2.7 4.3 3.8.6.3 1.1.4 1.4.5.6.2 1.1.2 1.5.1.5-.1 1.4-.6 1.6-1.1.2-.5.2-1 .1-1.1z"/></svg>
-            </a>
+            {brand.facebook && (
+              <a href={brand.facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook" className={socialCls}>
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M13 22v-8h3l1-4h-4V7.5c0-1.1.4-2 2-2h2V2h-3c-3 0-5 1.8-5 5v3H6v4h3v8h4z"/></svg>
+              </a>
+            )}
+            {brand.instagram && (
+              <a href={brand.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram" className={socialCls}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+              </a>
+            )}
+            {brand.whatsappHref && (
+              <a href={brand.whatsappHref} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className={socialCls}>
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M20.5 3.5A11 11 0 0 0 3 17l-1 5 5.2-1.4A11 11 0 1 0 20.5 3.5zM12 20a8 8 0 0 1-4.1-1.1l-.3-.2-3.1.8.8-3-.2-.3A8 8 0 1 1 12 20zm4.4-5.6c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.5.1-.2.2-.6.8-.7.9-.1.2-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5l.4-.4c.1-.1.2-.3.2-.4 0-.2 0-.3-.1-.4-.1-.1-.5-1.3-.7-1.7-.2-.5-.4-.4-.5-.4h-.5c-.2 0-.4 0-.6.3-.2.2-.8.8-.8 2s.9 2.3 1 2.5c.1.2 1.8 2.7 4.3 3.8.6.3 1.1.4 1.4.5.6.2 1.1.2 1.5.1.5-.1 1.4-.6 1.6-1.1.2-.5.2-1 .1-1.1z"/></svg>
+              </a>
+            )}
           </div>
         </div>
         <div>
           <h4 className="font-semibold text-calista-cream mb-2">Hours</h4>
-          {BRAND.hoursLines.map((l) => <p key={l}>{l}</p>)}
+          {brand.hoursLines.length ? brand.hoursLines.map((l) => <p key={l}>{l}</p>) : <p className="text-calista-cream/40">—</p>}
         </div>
         <div>
           <h4 className="font-semibold text-calista-cream mb-2">Contact</h4>
-          <p>{BRAND.address}</p>
-          <p>{BRAND.addressLine2}</p>
-          <p>
-            <a href={BRAND.phoneHref} className="hover:text-calista-gold">{BRAND.phone}</a>
-          </p>
-          <p>
-            <a href={BRAND.whatsappHref} target="_blank" rel="noopener noreferrer" className="hover:text-calista-gold">
-              WhatsApp · {BRAND.whatsapp}
-            </a>
-          </p>
+          {brand.address && <p>{brand.address}</p>}
+          {brand.addressLine2 && <p>{brand.addressLine2}</p>}
+          {brand.phone && (
+            <p><a href={brand.phoneHref} className="hover:text-calista-gold">{brand.phone}</a></p>
+          )}
+          {brand.whatsapp && (
+            <p>
+              <a href={brand.whatsappHref} target="_blank" rel="noopener noreferrer" className="hover:text-calista-gold">
+                WhatsApp · {brand.whatsapp}
+              </a>
+            </p>
+          )}
         </div>
       </div>
       <div className="flex justify-between items-center max-w-5xl mx-auto px-4 pb-5 text-xs text-calista-cream/40">
-        <span>© {new Date().getFullYear()} {BRAND.name}</span>
+        <span>© {new Date().getFullYear()} {brand.name || 'Your Restaurant'}</span>
         <Link to="/admin" className="hover:text-calista-gold">Admin</Link>
       </div>
     </footer>
@@ -177,11 +181,13 @@ function OrderBar() {
 function WhatsAppFab() {
   const location = useLocation()
   const { items } = useCart()
+  const brand = useBrand()
   if (location.pathname.startsWith('/admin')) return null
   if (items.length > 0) return null
+  if (!brand.whatsappHref) return null
   return (
     <a
-      href={BRAND.whatsappHref}
+      href={brand.whatsappHref}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Chat on WhatsApp"

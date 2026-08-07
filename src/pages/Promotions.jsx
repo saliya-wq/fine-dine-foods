@@ -1,10 +1,11 @@
 import { usePromotions, statusOf, formatDateRange } from '../promotionsStore.jsx'
 import { useImages } from '../imageStore.jsx'
-import { BRAND } from '../brand.js'
+import { useBrand } from '../brandStore.jsx'
 
 export default function PromotionsPage() {
   const { items } = usePromotions()
   const { getImage } = useImages()
+  const brand = useBrand()
   const today = new Date().toISOString().slice(0, 10)
 
   const visible = items
@@ -13,7 +14,7 @@ export default function PromotionsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
-      <h1 className="font-display text-4xl mb-2">What's on at {BRAND.name}</h1>
+      <h1 className="font-display text-4xl mb-2">What's on at {brand.name || 'our restaurant'}</h1>
       <p className="text-calista-ink/60 mb-10">
         Current promotions, weekly specials, and upcoming events.
       </p>
@@ -21,14 +22,16 @@ export default function PromotionsPage() {
       {visible.length === 0 && (
         <div className="text-center py-12 bg-white border border-calista-ink/10 rounded-lg">
           <p className="text-calista-ink/60 mb-3">No promotions on right now.</p>
-          <a
-            href={BRAND.facebook}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-calista-gold underline underline-offset-4"
-          >
-            Follow us on Facebook for updates →
-          </a>
+          {brand.facebook && (
+            <a
+              href={brand.facebook}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-calista-gold underline underline-offset-4"
+            >
+              Follow us on Facebook for updates →
+            </a>
+          )}
         </div>
       )}
 

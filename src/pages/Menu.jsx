@@ -7,7 +7,7 @@ import { useTable } from '../tableSession.jsx'
 import { useCustomers, normalizePhone, greetingForNow, dayPartPhrase } from '../customerStore.jsx'
 import { useSettings, getTier } from '../settingsStore.jsx'
 import { formatLKR } from '../format.js'
-import { BRAND } from '../brand.js'
+import { useBrand } from '../brandStore.jsx'
 
 export default function MenuPage() {
   const { add } = useCart()
@@ -91,6 +91,7 @@ export default function MenuPage() {
 
 function CustomerGreeting({ customer, tiers }) {
   const { clearActive } = useCustomers()
+  const brand = useBrand()
   const tier = getTier(customer.visits, tiers)
   const isNew = customer.visits === 0
   return (
@@ -102,7 +103,7 @@ function CustomerGreeting({ customer, tiers }) {
           </p>
           {isNew ? (
             <p className="text-sm text-calista-ink/70 mt-1">
-              Welcome to {BRAND.name}. Glad to have you with us.
+              Welcome to {brand.name || 'our restaurant'}. Glad to have you with us.
             </p>
           ) : (
             <p className="text-sm text-calista-ink/70 mt-1">
@@ -130,6 +131,7 @@ function PhoneGate() {
   const { table } = useTable()
   const { lookup, create, setActive } = useCustomers()
   const { loyaltyTiers } = useSettings()
+  const brand = useBrand()
   const [step, setStep] = useState('phone')
   const [phone, setPhone] = useState('')
   const [name, setName] = useState('')
@@ -191,7 +193,7 @@ function PhoneGate() {
       <div className="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl">
         <div className="text-center mb-6">
           <p className="text-calista-gold uppercase tracking-[0.3em] text-xs mb-1">Table {table}</p>
-          <h2 className="font-display text-3xl">{BRAND.name}</h2>
+          <h2 className="font-display text-3xl">{brand.name || 'Welcome'}</h2>
         </div>
 
         {step === 'phone' && (
@@ -269,6 +271,7 @@ function PhoneGate() {
 }
 
 function Greeting({ customer, tiers, onContinue }) {
+  const brand = useBrand()
   const tier = getTier(customer.visits, tiers)
   const isNew = customer.visits === 0
   return (
@@ -280,7 +283,7 @@ function Greeting({ customer, tiers, onContinue }) {
       </p>
       {isNew ? (
         <p className="text-calista-ink/70">
-          Welcome to {BRAND.name}. We're glad you joined us {dayPartPhrase()}.
+          Welcome to {brand.name || 'our restaurant'}. We're glad you joined us {dayPartPhrase()}.
         </p>
       ) : (
         <p className="text-calista-ink/70">

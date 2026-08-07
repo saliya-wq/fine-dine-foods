@@ -83,6 +83,18 @@ do $$ begin
   end if;
 end $$;
 
+-- ── Business details (brand) — public read, admin writes via api/settings.js ─
+create table if not exists site_settings (
+  id   text primary key,
+  data jsonb not null default '{}'
+);
+alter table site_settings enable row level security;
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename='site_settings' and policyname='public_read_site_settings') then
+    create policy public_read_site_settings on site_settings for select using (true);
+  end if;
+end $$;
+
 -- ── Seed: categories ──────────────────────────────────────────────────────
 insert into categories (id, name, sort_order) values
   ('starters', 'Starters', 1),
