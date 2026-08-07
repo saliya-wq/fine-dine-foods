@@ -109,7 +109,7 @@ export default function Home() {
       <section className="max-w-5xl mx-auto px-4 py-16 grid sm:grid-cols-3 gap-6">
         {[
           { t: 'Pickup', d: 'Order ahead, skip the wait. Ready in 20 minutes.' },
-          { t: 'Delivery', d: 'Hot food brought to your door across Negombo & Kochchikade.' },
+          { t: 'Delivery', d: 'Hot food brought to your door.' },
           { t: 'Dine In', d: 'Book a table — walk-ins welcome at the bar.' }
         ].map((card) => (
           <div key={card.t} className="text-center p-6 border border-calista-ink/10 rounded-lg bg-white">
