@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Routes, Route, Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import Home from './pages/Home.jsx'
 import Menu from './pages/Menu.jsx'
@@ -201,6 +202,10 @@ function WhatsAppFab() {
 }
 
 export default function App() {
+  const brand = useBrand()
+  useEffect(() => {
+    document.title = brand.name ? `${brand.name} — Menu & Online Ordering` : 'Menu & Online Ordering'
+  }, [brand.name])
   return (
     <div className="min-h-screen flex flex-col">
       <Nav />
