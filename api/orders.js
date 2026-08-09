@@ -148,12 +148,14 @@ export default async function handler(req, res) {
         const { data, error } = await supabase.from('orders').insert(row).select('*').single()
         if (error) throw error
 
+        // Units ordered, not distinct lines — "1 item" for 2× Funghi reads wrong.
+        const itemCount = row.items.reduce((n, i) => n + i.qty, 0)
         await logOrderEvent(supabase, {
           orderId: data.id,
           actor: customerActor(data.customer_name),
           event: 'placed',
           toStatus: 'placed',
-          detail: `${data.mode} · ${row.items.length} item${row.items.length === 1 ? '' : 's'}`
+          detail: `${data.mode} · ${itemCount} item${itemCount === 1 ? '' : 's'}`
         })
 
         // Best-effort: keep reception's email alert alive until the manager
