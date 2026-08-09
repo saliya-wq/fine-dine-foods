@@ -95,6 +95,39 @@ do $$ begin
   end if;
 end $$;
 
+-- ── Orders (Phase 1) ──────────────────────────────────────────────────────
+-- Private table: no public RLS policies. All access is via the server
+-- (service-role) through api/orders.js. Customers read their own order
+-- through the `get` action using the unguessable CAL-XXXXXX id.
+create table if not exists orders (
+  id                   text primary key,          -- CAL-XXXXXX
+  created_at           timestamptz not null default now(),
+  updated_at           timestamptz not null default now(),
+  mode                 text not null,             -- delivery | pickup | table
+  status               text not null default 'placed',
+  table_no             int,
+  customer_name        text,
+  customer_phone       text,
+  address              text,
+  location             text,                      -- Google Maps link
+  delivery_distance_km numeric,
+  out_of_zone          boolean not null default false,
+  requested_time       text,
+  notes                text,
+  items                jsonb   not null default '[]',
+  subtotal             integer not null default 0,
+  discount_amount      integer not null default 0,
+  discount_percent     numeric not null default 0,
+  service_charge       integer not null default 0,
+  service_charge_percent numeric not null default 0,
+  delivery_fee         integer not null default 0,
+  total                integer not null default 0,
+  rider_id             text
+);
+alter table orders enable row level security;
+create index if not exists orders_created_at_idx on orders (created_at desc);
+create index if not exists orders_status_idx on orders (status);
+
 -- ── Seed: categories ──────────────────────────────────────────────────────
 insert into categories (id, name, sort_order) values
   ('starters', 'Starters', 1),

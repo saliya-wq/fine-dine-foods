@@ -5,6 +5,7 @@ import Menu from './pages/Menu.jsx'
 import Promotions from './pages/Promotions.jsx'
 import Cart from './pages/Cart.jsx'
 import Checkout from './pages/Checkout.jsx'
+import Track from './pages/Track.jsx'
 import Admin from './pages/Admin.jsx'
 import AdminQR from './pages/AdminQR.jsx'
 import { useCart } from './cart.jsx'
@@ -217,6 +218,7 @@ export default function App() {
           <Route path="/promotions" element={<Promotions />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
+          <Route path="/track/:id" element={<Track />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/qr" element={<AdminQR />} />
         </Routes>

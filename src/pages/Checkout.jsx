@@ -110,6 +110,7 @@ export default function Checkout() {
     setSubmitting(true)
 
     const payload = {
+      action: 'place',
       table: table || null,
       mode: effectiveMode,
       name: active?.name || null,
@@ -143,7 +144,7 @@ export default function Checkout() {
     } catch (err) {
       if (import.meta.env.DEV) {
         orderId = `CAL-${Date.now().toString().slice(-6)}`
-        setWarning('Demo mode: order recorded locally but no email was sent. Deploy to Vercel with RESEND_API_KEY + RECEPTION_EMAIL set, or run `vercel dev` to test the email endpoint.')
+        setWarning('Demo mode: the order was not saved — /api/orders is unavailable. Run `vercel dev` (or deploy) to hit the real orders endpoint. Tracking will not work for this order number.')
       } else {
         setSubmitError(err.message || 'Could not place order. Please try again or call us.')
         setSubmitting(false)
@@ -180,22 +181,21 @@ export default function Checkout() {
             {warning}
           </p>
         )}
-        <div className="flex gap-2 justify-center">
-          {isTable ? (
+        <div className="flex flex-wrap gap-2 justify-center">
+          {!warning && (
             <button
-              onClick={() => navigate('/menu')}
-              className="bg-calista-ink text-calista-cream px-6 py-3 rounded-full font-semibold"
+              onClick={() => navigate(`/track/${placed}`)}
+              className="bg-calista-gold text-calista-ink px-6 py-3 rounded-full font-semibold hover:bg-calista-ink hover:text-calista-cream transition"
             >
-              Add to order
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate('/')}
-              className="bg-calista-ink text-calista-cream px-6 py-3 rounded-full font-semibold"
-            >
-              Back to home
+              Track your order →
             </button>
           )}
+          <button
+            onClick={() => navigate(isTable ? '/menu' : '/')}
+            className="px-6 py-3 rounded-full font-semibold border border-calista-ink/20 hover:border-calista-gold transition"
+          >
+            {isTable ? 'Add to order' : 'Back to home'}
+          </button>
         </div>
       </div>
     )

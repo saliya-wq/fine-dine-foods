@@ -1,59 +1,199 @@
-const escapeHtml = (s = '') =>
-  String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+import { createClient } from '@supabase/supabase-js'
+import { pipelineFor } from '../src/orderStatus.js'
 
-const formatLKR = (n) =>
-  `Rs. ${Number(n || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const URL = process.env.SUPABASE_URL
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+const admin = () => createClient(URL, SERVICE_KEY, { auth: { persistSession: false } })
+
+// Unambiguous alphabet — no O/0, I/1, L. 31^6 ≈ 887M, so ids are not guessable.
+const ID_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+const newOrderId = () => {
+  let s = ''
+  for (let i = 0; i < 6; i++) s += ID_ALPHABET[Math.floor(Math.random() * ID_ALPHABET.length)]
+  return `CAL-${s}`
+}
+
+const int = (n) => Math.round(Number(n) || 0)
+const num = (n) => Number(n) || 0
+
+// What the customer sees on the tracking page. Never exposes phone or rider.
+const toPublicOrder = (r) => ({
+  id: r.id,
+  createdAt: r.created_at,
+  mode: r.mode,
+  status: r.status,
+  table: r.table_no,
+  address: r.address || '',
+  requestedTime: r.requested_time || '',
+  notes: r.notes || '',
+  items: r.items || [],
+  subtotal: r.subtotal,
+  discountAmount: r.discount_amount,
+  serviceCharge: r.service_charge,
+  deliveryFee: r.delivery_fee,
+  total: r.total
+})
+
+// The manager/admin view — everything.
+const toAdminOrder = (r) => ({
+  ...toPublicOrder(r),
+  customerName: r.customer_name || '',
+  customerPhone: r.customer_phone || '',
+  location: r.location || '',
+  deliveryDistanceKm: r.delivery_distance_km,
+  outOfZone: r.out_of_zone,
+  riderId: r.rider_id || null,
+  updatedAt: r.updated_at
+})
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
   }
-
-  const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
-  const {
-    table,
-    mode,
-    name,
-    phone,
-    address,
-    location,
-    deliveryDistanceKm,
-    outOfZone,
-    time,
-    notes,
-    items = [],
-    customer = null,
-    subtotal = 0,
-    discountAmount = 0,
-    discountPercent = 0,
-    serviceCharge = 0,
-    serviceChargePercent = 0,
-    deliveryFee = 0,
-    total = 0
-  } = body
-
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'Order must contain at least one item.' })
+  if (!URL || !SERVICE_KEY) {
+    return res.status(500).json({ error: 'Server not configured (Supabase env vars missing).' })
   }
 
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}
+  const action = body.action || 'place'
+  const supabase = admin()
+
+  const requireAdmin = () =>
+    process.env.ADMIN_PASSWORD && req.headers['x-admin-password'] === process.env.ADMIN_PASSWORD
+
+  try {
+    switch (action) {
+      // ── Public: place an order ────────────────────────────────────────
+      case 'place': {
+        const items = Array.isArray(body.items) ? body.items : []
+        if (items.length === 0) {
+          return res.status(400).json({ error: 'Order must contain at least one item.' })
+        }
+        const mode = ['delivery', 'pickup', 'table'].includes(body.mode) ? body.mode : 'pickup'
+
+        const row = {
+          id: newOrderId(),
+          mode,
+          status: 'placed',
+          table_no: mode === 'table' && body.table != null ? int(body.table) : null,
+          customer_name: body.customer?.name || body.name || null,
+          customer_phone: body.customer?.phone || body.phone || null,
+          address: body.address || null,
+          location: body.location || null,
+          delivery_distance_km: body.deliveryDistanceKm != null ? num(body.deliveryDistanceKm) : null,
+          out_of_zone: !!body.outOfZone,
+          requested_time: body.time || null,
+          notes: body.notes || null,
+          items: items.map((i) => ({
+            id: i.id,
+            name: i.name,
+            price: int(i.price),
+            qty: int(i.qty)
+          })),
+          subtotal: int(body.subtotal),
+          discount_amount: int(body.discountAmount),
+          discount_percent: num(body.discountPercent),
+          service_charge: int(body.serviceCharge),
+          service_charge_percent: num(body.serviceChargePercent),
+          delivery_fee: int(body.deliveryFee),
+          total: int(body.total)
+        }
+
+        const { data, error } = await supabase.from('orders').insert(row).select('*').single()
+        if (error) throw error
+
+        // Best-effort: keep reception's email alert alive until the manager
+        // console lands. Never fails the order.
+        notifyReception(data).catch((err) => console.error('reception email failed:', err))
+
+        return res.status(200).json({ orderId: data.id })
+      }
+
+      // ── Public: fetch one order for the tracking page ─────────────────
+      case 'get': {
+        const id = String(body.id || '').trim().toUpperCase()
+        if (!id) return res.status(400).json({ error: 'Order id required.' })
+        const { data, error } = await supabase.from('orders').select('*').eq('id', id).maybeSingle()
+        if (error) throw error
+        if (!data) return res.status(404).json({ error: 'Order not found.' })
+        return res.status(200).json({ order: toPublicOrder(data) })
+      }
+
+      // ── Admin: recent orders ──────────────────────────────────────────
+      case 'list': {
+        if (!requireAdmin()) return res.status(401).json({ error: 'Unauthorized.' })
+        const limit = Math.min(int(body.limit) || 100, 500)
+        let q = supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(limit)
+        if (body.status) q = q.eq('status', body.status)
+        if (body.mode) q = q.eq('mode', body.mode)
+        const { data, error } = await q
+        if (error) throw error
+        return res.status(200).json({ orders: (data || []).map(toAdminOrder) })
+      }
+
+      // ── Admin: move an order along its pipeline ───────────────────────
+      case 'updateStatus': {
+        if (!requireAdmin()) return res.status(401).json({ error: 'Unauthorized.' })
+        const id = String(body.id || '').trim().toUpperCase()
+        const status = String(body.status || '').trim()
+        if (!id || !status) return res.status(400).json({ error: 'Order id and status required.' })
+
+        const { data: existing, error: findErr } = await supabase
+          .from('orders')
+          .select('mode')
+          .eq('id', id)
+          .maybeSingle()
+        if (findErr) throw findErr
+        if (!existing) return res.status(404).json({ error: 'Order not found.' })
+
+        const allowed = [...pipelineFor(existing.mode), 'cancelled']
+        if (!allowed.includes(status)) {
+          return res.status(400).json({ error: `Status "${status}" is not valid for a ${existing.mode} order.` })
+        }
+
+        const { data, error } = await supabase
+          .from('orders')
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .select('*')
+          .single()
+        if (error) throw error
+        return res.status(200).json({ order: toAdminOrder(data) })
+      }
+
+      default:
+        return res.status(400).json({ error: 'Unknown action.' })
+    }
+  } catch (err) {
+    console.error('orders api error:', action, err)
+    return res.status(500).json({ error: err.message || 'Server error.' })
+  }
+}
+
+// ── Reception email (optional) ───────────────────────────────────────────
+// Interim notification channel; drops out silently once the env vars are
+// removed, and is replaced by the manager console in a later phase.
+
+const escapeHtml = (s = '') =>
+  String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+const formatLKR = (n) =>
+  `Rs. ${Number(n || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+async function notifyReception(o) {
   const RECEPTION_EMAIL = process.env.RECEPTION_EMAIL
   const RESEND_API_KEY = process.env.RESEND_API_KEY
+  if (!RECEPTION_EMAIL || !RESEND_API_KEY) return
+
   const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Calista Orders <onboarding@resend.dev>'
-
-  if (!RECEPTION_EMAIL || !RESEND_API_KEY) {
-    console.error('Missing RECEPTION_EMAIL or RESEND_API_KEY env vars.')
-    return res.status(500).json({ error: 'Email is not configured on the server. Contact the restaurant directly.' })
-  }
-
-  const orderId = `CAL-${Date.now().toString().slice(-6)}`
-
   const subject =
-    mode === 'table'
-      ? `[Table ${table}] New order ${orderId}`
-      : `[${(mode || 'order').toUpperCase()}] New order ${orderId}`
+    o.mode === 'table'
+      ? `[Table ${o.table_no}] New order ${o.id}`
+      : `[${String(o.mode).toUpperCase()}] New order ${o.id}`
 
-  const itemRows = items
+  const itemRows = (o.items || [])
     .map(
       (i) => `
         <tr>
@@ -65,97 +205,71 @@ export default async function handler(req, res) {
     )
     .join('')
 
+  const line = (label, value) => (value ? `<p><strong>${label}:</strong> ${escapeHtml(value)}</p>` : '')
+  const extraRow = (label, value, color) =>
+    Number(value) > 0
+      ? `<tr><td style="padding: 4px 0;${color ? `color:${color};` : ''}">${label}</td><td style="padding: 4px 0; text-align: right;${
+          color ? `color:${color};` : ''
+        }">${formatLKR(value)}</td></tr>`
+      : ''
+
   const html = `
     <div style="font-family: 'Inter', system-ui, sans-serif; background: #faf6ef; padding: 24px;">
       <div style="max-width: 600px; margin: auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.06);">
         <div style="background: #0f172a; color: #c8a96a; padding: 24px;">
-          <h1 style="margin: 0; font-size: 24px; letter-spacing: 0.05em;">Calista — New Order</h1>
-          <p style="margin: 4px 0 0; color: #faf6ef; font-size: 14px;">${escapeHtml(orderId)}</p>
+          <h1 style="margin: 0; font-size: 24px; letter-spacing: 0.05em;">New Order</h1>
+          <p style="margin: 4px 0 0; color: #faf6ef; font-size: 14px;">${escapeHtml(o.id)}</p>
         </div>
         <div style="padding: 24px; color: #0f172a;">
-          ${mode === 'table' ? `<div style="background: #c8a96a; color: #0f172a; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 16px;"><div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em;">Table</div><div style="font-size: 28px; font-weight: bold;">${escapeHtml(table)}</div></div>` : ''}
-          ${mode && mode !== 'table' ? `<p><strong>Type:</strong> ${escapeHtml(mode)}</p>` : ''}
           ${
-            customer
-              ? `<div style="background: #faf6ef; border-left: 3px solid #c8a96a; padding: 10px 14px; margin-bottom: 16px;">
-                  <p style="margin: 0;"><strong>${escapeHtml(customer.name)}</strong> · <a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(customer.phone)}</a></p>
-                  <p style="margin: 4px 0 0; font-size: 13px; color: #555;">Visit #${Number(customer.visits) + 1} · ${escapeHtml(customer.tier || 'Customer')} tier</p>
-                </div>`
+            o.mode === 'table'
+              ? `<div style="background: #c8a96a; color: #0f172a; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 16px;"><div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em;">Table</div><div style="font-size: 28px; font-weight: bold;">${escapeHtml(o.table_no)}</div></div>`
+              : `<p><strong>Type:</strong> ${escapeHtml(o.mode)}</p>`
+          }
+          ${line('Customer', o.customer_name)}
+          ${o.customer_phone ? `<p><strong>Phone:</strong> <a href="tel:${escapeHtml(o.customer_phone)}">${escapeHtml(o.customer_phone)}</a></p>` : ''}
+          ${line('Address', o.address)}
+          ${o.location ? `<p><strong>📍 Location:</strong> <a href="${escapeHtml(o.location)}" style="color: #c8a96a; font-weight: 600;">Open in Google Maps</a></p>` : ''}
+          ${
+            o.delivery_distance_km != null
+              ? `<p><strong>Distance:</strong> ~${escapeHtml(o.delivery_distance_km)} km${o.out_of_zone ? ' <span style="color: #b45309; font-weight: 600;">(outside delivery zone — confirm before dispatch)</span>' : ''}</p>`
               : ''
           }
-          ${!customer && name ? `<p><strong>Customer:</strong> ${escapeHtml(name)}</p>` : ''}
-          ${!customer && phone ? `<p><strong>Phone:</strong> <a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a></p>` : ''}
-          ${address ? `<p><strong>Address:</strong> ${escapeHtml(address)}</p>` : ''}
-          ${location ? `<p><strong>📍 Location:</strong> <a href="${escapeHtml(location)}" style="color: #c8a96a; font-weight: 600;">Open in Google Maps</a></p>` : ''}
-          ${deliveryDistanceKm != null ? `<p><strong>Distance:</strong> ~${escapeHtml(deliveryDistanceKm)} km${outOfZone ? ' <span style="color: #b45309; font-weight: 600;">(outside delivery zone — confirm before dispatch)</span>' : ''}</p>` : ''}
-          ${time ? `<p><strong>Requested time:</strong> ${escapeHtml(time)}</p>` : ''}
+          ${line('Requested time', o.requested_time)}
 
           <h2 style="font-size: 16px; color: #c8a96a; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.1em;">Items</h2>
           <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
             ${itemRows}
             <tr>
               <td style="padding: 8px 0;">Subtotal</td>
-              <td style="padding: 8px 0; text-align: right;">${formatLKR(subtotal)}</td>
+              <td style="padding: 8px 0; text-align: right;">${formatLKR(o.subtotal)}</td>
             </tr>
-            ${
-              Number(discountAmount) > 0
-                ? `<tr><td style="padding: 4px 0; color: #c8a96a;">Loyalty discount (${Number(discountPercent)}%)</td><td style="padding: 4px 0; text-align: right; color: #c8a96a;">− ${formatLKR(discountAmount)}</td></tr>`
-                : ''
-            }
-            ${
-              Number(serviceCharge) > 0
-                ? `<tr><td style="padding: 4px 0;">Service charge (${Number(serviceChargePercent)}%)</td><td style="padding: 4px 0; text-align: right;">${formatLKR(serviceCharge)}</td></tr>`
-                : ''
-            }
-            ${
-              Number(deliveryFee) > 0
-                ? `<tr><td style="padding: 4px 0;">Delivery</td><td style="padding: 4px 0; text-align: right;">${formatLKR(deliveryFee)}</td></tr>`
-                : ''
-            }
+            ${extraRow(`Loyalty discount (${Number(o.discount_percent)}%)`, o.discount_amount, '#c8a96a')}
+            ${extraRow(`Service charge (${Number(o.service_charge_percent)}%)`, o.service_charge)}
+            ${extraRow('Delivery', o.delivery_fee)}
             <tr style="border-top: 2px solid #0f172a;">
               <td style="padding: 10px 0; font-weight: bold; font-size: 16px;">Total</td>
-              <td style="padding: 10px 0; font-weight: bold; font-size: 16px; text-align: right;">${formatLKR(total)}</td>
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px; text-align: right;">${formatLKR(o.total)}</td>
             </tr>
           </table>
 
           ${
-            notes
-              ? `<h2 style="font-size: 16px; color: #c8a96a; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.1em;">Notes</h2><p style="background: #faf6ef; padding: 12px; border-radius: 6px; white-space: pre-line;">${escapeHtml(notes)}</p>`
+            o.notes
+              ? `<h2 style="font-size: 16px; color: #c8a96a; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 0.1em;">Notes</h2><p style="background: #faf6ef; padding: 12px; border-radius: 6px; white-space: pre-line;">${escapeHtml(o.notes)}</p>`
               : ''
           }
         </div>
         <div style="background: #faf6ef; padding: 12px 24px; font-size: 12px; color: #94918d; text-align: center;">
-          Order placed at ${new Date().toLocaleString('en-GB', { timeZone: 'Asia/Colombo', dateStyle: 'medium', timeStyle: 'short' })} (Colombo time)
+          Order placed at ${new Date(o.created_at).toLocaleString('en-GB', { timeZone: 'Asia/Colombo', dateStyle: 'medium', timeStyle: 'short' })} (Colombo time)
         </div>
       </div>
     </div>
   `
 
-  try {
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
-        to: RECEPTION_EMAIL,
-        reply_to: phone ? undefined : undefined,
-        subject,
-        html
-      })
-    })
-
-    if (!r.ok) {
-      const errText = await r.text()
-      console.error('Resend API error:', r.status, errText)
-      return res.status(502).json({ error: 'Email service rejected the request.', detail: errText })
-    }
-
-    return res.status(200).json({ orderId })
-  } catch (err) {
-    console.error('Failed to call Resend:', err)
-    return res.status(500).json({ error: 'Failed to send order email.' })
-  }
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM_EMAIL, to: RECEPTION_EMAIL, subject, html })
+  })
+  if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`)
 }
