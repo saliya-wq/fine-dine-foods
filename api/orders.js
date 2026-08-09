@@ -175,7 +175,7 @@ export default async function handler(req, res) {
 
         const { data: existing, error: findErr } = await supabase
           .from('orders')
-          .select('mode, status, customer_phone')
+          .select('mode, status, customer_phone, rider_id')
           .eq('id', id)
           .maybeSingle()
         if (findErr) throw findErr
@@ -184,6 +184,11 @@ export default async function handler(req, res) {
         const allowed = [...pipelineFor(existing.mode), 'cancelled']
         if (!allowed.includes(status)) {
           return res.status(400).json({ error: `Status "${status}" is not valid for a ${existing.mode} order.` })
+        }
+        // Nothing leaves the restaurant unattributed. Enforced here and not
+        // only in the console, so a direct API call can't sidestep it.
+        if (status === 'out_for_delivery' && existing.mode === 'delivery' && !existing.rider_id) {
+          return res.status(400).json({ error: 'Assign a rider before marking this order out for delivery.' })
         }
 
         const result = await applyStatus(supabase, id, status, existing.status)
