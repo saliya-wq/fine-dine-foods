@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { pipelineFor, statusLabel } from '../src/orderStatus.js'
 import { sendToCustomer } from '../lib/push.js'
+import { authorize } from '../lib/staff.js'
 
 const URL = process.env.SUPABASE_URL
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -61,8 +62,9 @@ export default async function handler(req, res) {
   const action = body.action || 'place'
   const supabase = admin()
 
-  const requireAdmin = () =>
-    process.env.ADMIN_PASSWORD && req.headers['x-admin-password'] === process.env.ADMIN_PASSWORD
+  // Manager and above may run the order queue; the admin password still
+  // counts as `admin`, so /admin keeps working.
+  const requireStaff = (minRole = 'manager') => authorize(supabase, req, minRole)
 
   try {
     switch (action) {
@@ -124,7 +126,7 @@ export default async function handler(req, res) {
 
       // ── Admin: recent orders ──────────────────────────────────────────
       case 'list': {
-        if (!requireAdmin()) return res.status(401).json({ error: 'Unauthorized.' })
+        if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
         const limit = Math.min(int(body.limit) || 100, 500)
         let q = supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(limit)
         if (body.status) q = q.eq('status', body.status)
@@ -136,7 +138,7 @@ export default async function handler(req, res) {
 
       // ── Admin: move an order along its pipeline ───────────────────────
       case 'updateStatus': {
-        if (!requireAdmin()) return res.status(401).json({ error: 'Unauthorized.' })
+        if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
         const id = String(body.id || '').trim().toUpperCase()
         const status = String(body.status || '').trim()
         if (!id || !status) return res.status(400).json({ error: 'Order id and status required.' })
@@ -178,6 +180,35 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json({ order: toAdminOrder(data), push })
+      }
+
+      // ── Manager+: put a delivery order in a rider's queue ─────────────
+      case 'assignRider': {
+        if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
+        const id = String(body.id || '').trim().toUpperCase()
+        if (!id) return res.status(400).json({ error: 'Order id required.' })
+        const riderId = body.riderId || null
+
+        if (riderId) {
+          const { data: rider, error: riderErr } = await supabase
+            .from('staff_keys')
+            .select('id, role, active')
+            .eq('id', riderId)
+            .maybeSingle()
+          if (riderErr) throw riderErr
+          if (!rider || !rider.active || rider.role !== 'rider') {
+            return res.status(400).json({ error: 'That rider is not available.' })
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('orders')
+          .update({ rider_id: riderId, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .select('*')
+          .single()
+        if (error) throw error
+        return res.status(200).json({ order: toAdminOrder(data) })
       }
 
       default:

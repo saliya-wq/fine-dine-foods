@@ -6,6 +6,7 @@ import Promotions from './pages/Promotions.jsx'
 import Cart from './pages/Cart.jsx'
 import Checkout from './pages/Checkout.jsx'
 import Track from './pages/Track.jsx'
+import Staff from './pages/Staff.jsx'
 import Admin from './pages/Admin.jsx'
 import AdminQR from './pages/AdminQR.jsx'
 import { useCart } from './cart.jsx'
@@ -128,7 +129,10 @@ function Footer() {
       </div>
       <div className="flex justify-between items-center max-w-5xl mx-auto px-4 pb-5 text-xs text-calista-cream/40">
         <span>© {new Date().getFullYear()} {brand.name || 'Your Restaurant'}</span>
-        <Link to="/admin" className="hover:text-calista-gold">Admin</Link>
+        <span className="flex gap-3">
+          <Link to="/staff" className="hover:text-calista-gold">Staff</Link>
+          <Link to="/admin" className="hover:text-calista-gold">Admin</Link>
+        </span>
       </div>
     </footer>
   )
@@ -227,6 +231,7 @@ export default function App() {
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/track/:id" element={<Track />} />
+          <Route path="/staff" element={<Staff />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/qr" element={<AdminQR />} />
         </Routes>

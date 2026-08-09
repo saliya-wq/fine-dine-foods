@@ -1,5 +1,14 @@
 import { admin } from '../lib/push.js'
-import { ROLES, atLeast, generateKey, hashKey, keyPrefix, normalizeKey, staffFromRequest } from '../lib/staff.js'
+import {
+  ROLES,
+  atLeast,
+  authorize,
+  generateKey,
+  hashKey,
+  keyPrefix,
+  normalizeKey,
+  staffFromRequest
+} from '../lib/staff.js'
 
 const publicRow = (r) => ({
   id: r.id,
@@ -42,6 +51,20 @@ export default async function handler(req, res) {
         const staff = await staffFromRequest(supabase, req)
         if (!staff) return res.status(401).json({ error: 'Unauthorized.' })
         return res.status(200).json({ staff })
+      }
+
+      // ── Manager+: who can a delivery be handed to ─────────────────────
+      // Names and ids only — never anything key-related.
+      case 'riders': {
+        if (!(await authorize(supabase, req, 'manager'))) return res.status(401).json({ error: 'Unauthorized.' })
+        const { data, error } = await supabase
+          .from('staff_keys')
+          .select('id, name')
+          .eq('role', 'rider')
+          .eq('active', true)
+          .order('name', { ascending: true })
+        if (error) throw error
+        return res.status(200).json({ riders: data || [] })
       }
 
       // ── Sys Admin only: manage keys ───────────────────────────────────
