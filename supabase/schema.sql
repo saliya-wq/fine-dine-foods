@@ -179,6 +179,25 @@ alter table staff_keys add column if not exists created_by   text;
 alter table staff_keys enable row level security;
 create unique index if not exists staff_keys_hash_idx on staff_keys (key_hash);
 
+-- ── Order audit trail ─────────────────────────────────────────────────────
+-- Append-only: who changed what on an order, and when. Private table, no
+-- public RLS policies. Written best-effort by api/orders.js — an audit
+-- failure must never fail the operation it describes.
+create table if not exists order_events (
+  id uuid primary key default gen_random_uuid()
+);
+alter table order_events add column if not exists order_id    text;
+alter table order_events add column if not exists at          timestamptz not null default now();
+alter table order_events add column if not exists actor_id    text;
+alter table order_events add column if not exists actor_name  text;
+alter table order_events add column if not exists actor_role  text;
+alter table order_events add column if not exists event       text;
+alter table order_events add column if not exists from_status text;
+alter table order_events add column if not exists to_status   text;
+alter table order_events add column if not exists detail      text;
+alter table order_events enable row level security;
+create index if not exists order_events_order_idx on order_events (order_id, at);
+
 -- ── Seed: categories ──────────────────────────────────────────────────────
 insert into categories (id, name, sort_order) values
   ('starters', 'Starters', 1),

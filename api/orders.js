@@ -2,13 +2,14 @@ import { createClient } from '@supabase/supabase-js'
 import { pipelineFor, statusLabel } from '../src/orderStatus.js'
 import { sendToCustomer } from '../lib/push.js'
 import { authorize } from '../lib/staff.js'
+import { customerActor, logOrderEvent } from '../lib/audit.js'
 
 /**
- * Write a new status and notify the customer. Shared by the manager path and
- * the rider path so both produce identical side effects. The push is
- * best-effort: it must never fail the status change itself.
+ * Write a new status, record who did it, and notify the customer. Shared by
+ * the manager path and the rider path so both produce identical side effects.
+ * The push is best-effort: it must never fail the status change itself.
  */
-async function applyStatus(supabase, id, status, previousStatus) {
+async function applyStatus(supabase, id, status, previousStatus, actor) {
   const { data, error } = await supabase
     .from('orders')
     .update({ status, updated_at: new Date().toISOString() })
@@ -16,6 +17,16 @@ async function applyStatus(supabase, id, status, previousStatus) {
     .select('*')
     .single()
   if (error) throw error
+
+  if (status !== previousStatus) {
+    await logOrderEvent(supabase, {
+      orderId: id,
+      actor,
+      event: 'status',
+      fromStatus: previousStatus,
+      toStatus: status
+    })
+  }
 
   let push = null
   if (status !== previousStatus && data.customer_phone) {
@@ -137,6 +148,14 @@ export default async function handler(req, res) {
         const { data, error } = await supabase.from('orders').insert(row).select('*').single()
         if (error) throw error
 
+        await logOrderEvent(supabase, {
+          orderId: data.id,
+          actor: customerActor(data.customer_name),
+          event: 'placed',
+          toStatus: 'placed',
+          detail: `${data.mode} · ${row.items.length} item${row.items.length === 1 ? '' : 's'}`
+        })
+
         // Best-effort: keep reception's email alert alive until the manager
         // console lands. Never fails the order.
         notifyReception(data).catch((err) => console.error('reception email failed:', err))
@@ -168,7 +187,8 @@ export default async function handler(req, res) {
 
       // ── Admin: move an order along its pipeline ───────────────────────
       case 'updateStatus': {
-        if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
+        const actor = await requireStaff()
+        if (!actor) return res.status(401).json({ error: 'Unauthorized.' })
         const id = String(body.id || '').trim().toUpperCase()
         const status = String(body.status || '').trim()
         if (!id || !status) return res.status(400).json({ error: 'Order id and status required.' })
@@ -191,8 +211,32 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'Assign a rider before marking this order out for delivery.' })
         }
 
-        const result = await applyStatus(supabase, id, status, existing.status)
+        const result = await applyStatus(supabase, id, status, existing.status, actor)
         return res.status(200).json(result)
+      }
+
+      // ── Manager+: who touched this order ──────────────────────────────
+      case 'history': {
+        if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
+        const id = String(body.id || '').trim().toUpperCase()
+        if (!id) return res.status(400).json({ error: 'Order id required.' })
+        const { data, error } = await supabase
+          .from('order_events')
+          .select('*')
+          .eq('order_id', id)
+          .order('at', { ascending: true })
+        if (error) throw error
+        return res.status(200).json({
+          events: (data || []).map((e) => ({
+            at: e.at,
+            event: e.event,
+            actorName: e.actor_name,
+            actorRole: e.actor_role,
+            fromStatus: e.from_status,
+            toStatus: e.to_status,
+            detail: e.detail
+          }))
+        })
       }
 
       // ── Rider: only their own runs ────────────────────────────────────
@@ -218,8 +262,8 @@ export default async function handler(req, res) {
       // Scoped hard: only their own order, and only these two states, so a
       // rider key can never move an order through the kitchen or cancel it.
       case 'riderStatus': {
-        const staff = await authorize(supabase, req, 'rider')
-        if (!staff || staff.role !== 'rider') return res.status(401).json({ error: 'Unauthorized.' })
+        const rider = await authorize(supabase, req, 'rider')
+        if (!rider || rider.role !== 'rider') return res.status(401).json({ error: 'Unauthorized.' })
         const id = String(body.id || '').trim().toUpperCase()
         const status = String(body.status || '').trim()
         if (!['out_for_delivery', 'delivered'].includes(status)) {
@@ -232,34 +276,37 @@ export default async function handler(req, res) {
           .eq('id', id)
           .maybeSingle()
         if (findErr) throw findErr
-        if (!existing || existing.rider_id !== staff.id) {
+        if (!existing || existing.rider_id !== rider.id) {
           return res.status(404).json({ error: 'That delivery is not assigned to you.' })
         }
         if (existing.status === 'cancelled') {
           return res.status(400).json({ error: 'That order was cancelled.' })
         }
 
-        const result = await applyStatus(supabase, id, status, existing.status)
+        const result = await applyStatus(supabase, id, status, existing.status, rider)
         return res.status(200).json(result)
       }
 
       // ── Manager+: put a delivery order in a rider's queue ─────────────
       case 'assignRider': {
-        if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
+        const actor = await requireStaff()
+        if (!actor) return res.status(401).json({ error: 'Unauthorized.' })
         const id = String(body.id || '').trim().toUpperCase()
         if (!id) return res.status(400).json({ error: 'Order id required.' })
         const riderId = body.riderId || null
 
+        let riderName = null
         if (riderId) {
           const { data: rider, error: riderErr } = await supabase
             .from('staff_keys')
-            .select('id, role, active')
+            .select('id, role, active, name')
             .eq('id', riderId)
             .maybeSingle()
           if (riderErr) throw riderErr
           if (!rider || !rider.active || rider.role !== 'rider') {
             return res.status(400).json({ error: 'That rider is not available.' })
           }
+          riderName = rider.name
         }
 
         const { data, error } = await supabase
@@ -269,6 +316,14 @@ export default async function handler(req, res) {
           .select('*')
           .single()
         if (error) throw error
+
+        await logOrderEvent(supabase, {
+          orderId: id,
+          actor,
+          event: riderId ? 'assign_rider' : 'unassign_rider',
+          detail: riderName ? `Assigned to ${riderName}` : 'Rider removed'
+        })
+
         return res.status(200).json({ order: toAdminOrder(data) })
       }
 

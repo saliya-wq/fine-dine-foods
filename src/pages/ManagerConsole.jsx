@@ -340,6 +340,73 @@ function OrderCard({ order, riders, busy, onSetStatus, onAssign }) {
           )}
         </div>
       )}
+
+      <History orderId={order.id} />
     </div>
   )
+}
+
+// Collapsed by default — one fetch per order, only when someone asks.
+function History({ orderId }) {
+  const [open, setOpen] = useState(false)
+  const [events, setEvents] = useState(null)
+  const [error, setError] = useState(null)
+
+  const toggle = async () => {
+    const next = !open
+    setOpen(next)
+    if (next && !events) {
+      try {
+        const { events } = await staffPost('/api/orders', { action: 'history', id: orderId })
+        setEvents(events || [])
+      } catch (e) {
+        setError(e.message)
+      }
+    }
+  }
+
+  return (
+    <div className="mt-3 pt-2 border-t border-calista-ink/10">
+      <button onClick={toggle} className="text-xs text-calista-ink/40 hover:text-calista-ink">
+        {open ? 'Hide history' : 'History'}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1">
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          {!events && !error && <p className="text-xs text-calista-ink/40">Loading…</p>}
+          {events?.length === 0 && (
+            <p className="text-xs text-calista-ink/40">
+              No history recorded — this order predates the audit trail.
+            </p>
+          )}
+          {events?.map((e, i) => (
+            <div key={i} className="text-xs text-calista-ink/60 flex gap-2">
+              <span className="text-calista-ink/35 shrink-0 tabular-nums">
+                {new Date(e.at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+              </span>
+              <span>
+                {describeEvent(e)}
+                <span className="text-calista-ink/35">
+                  {' — '}
+                  {e.actorName || 'unknown'}
+                  {e.actorRole ? ` (${e.actorRole})` : ''}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const describeEvent = (e) => {
+  if (e.event === 'placed') return `Order placed${e.detail ? ` · ${e.detail}` : ''}`
+  if (e.event === 'assign_rider' || e.event === 'unassign_rider') return e.detail || 'Rider changed'
+  if (e.event === 'status') {
+    return e.fromStatus
+      ? `${statusLabel(e.fromStatus)} → ${statusLabel(e.toStatus)}`
+      : statusLabel(e.toStatus)
+  }
+  return e.event
 }
