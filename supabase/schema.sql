@@ -100,30 +100,36 @@ end $$;
 -- (service-role) through api/orders.js. Customers read their own order
 -- through the `get` action using the unguessable CAL-XXXXXX id.
 create table if not exists orders (
-  id                   text primary key,          -- CAL-XXXXXX
-  created_at           timestamptz not null default now(),
-  updated_at           timestamptz not null default now(),
-  mode                 text not null,             -- delivery | pickup | table
-  status               text not null default 'placed',
-  table_no             int,
-  customer_name        text,
-  customer_phone       text,
-  address              text,
-  location             text,                      -- Google Maps link
-  delivery_distance_km numeric,
-  out_of_zone          boolean not null default false,
-  requested_time       text,
-  notes                text,
-  items                jsonb   not null default '[]',
-  subtotal             integer not null default 0,
-  discount_amount      integer not null default 0,
-  discount_percent     numeric not null default 0,
-  service_charge       integer not null default 0,
-  service_charge_percent numeric not null default 0,
-  delivery_fee         integer not null default 0,
-  total                integer not null default 0,
-  rider_id             text
+  id text primary key                             -- CAL-XXXXXX
 );
+-- Columns are added one by one rather than inline above: `create table if not
+-- exists` is a silent no-op when a table of that name already exists, so an
+-- older/differently-shaped `orders` table would leave the columns missing and
+-- every insert failing. These ALTERs converge any existing table on the right
+-- shape. Every added column is nullable or defaulted so this is safe to run
+-- against a table that already has rows.
+alter table orders add column if not exists created_at             timestamptz not null default now();
+alter table orders add column if not exists updated_at             timestamptz not null default now();
+alter table orders add column if not exists mode                   text;    -- delivery | pickup | table
+alter table orders add column if not exists status                 text not null default 'placed';
+alter table orders add column if not exists table_no               int;
+alter table orders add column if not exists customer_name          text;
+alter table orders add column if not exists customer_phone         text;
+alter table orders add column if not exists address                text;
+alter table orders add column if not exists location               text;    -- Google Maps link
+alter table orders add column if not exists delivery_distance_km   numeric;
+alter table orders add column if not exists out_of_zone            boolean not null default false;
+alter table orders add column if not exists requested_time         text;
+alter table orders add column if not exists notes                  text;
+alter table orders add column if not exists items                  jsonb   not null default '[]';
+alter table orders add column if not exists subtotal               integer not null default 0;
+alter table orders add column if not exists discount_amount        integer not null default 0;
+alter table orders add column if not exists discount_percent       numeric not null default 0;
+alter table orders add column if not exists service_charge         integer not null default 0;
+alter table orders add column if not exists service_charge_percent numeric not null default 0;
+alter table orders add column if not exists delivery_fee           integer not null default 0;
+alter table orders add column if not exists total                  integer not null default 0;
+alter table orders add column if not exists rider_id               text;
 alter table orders enable row level security;
 create index if not exists orders_created_at_idx on orders (created_at desc);
 create index if not exists orders_status_idx on orders (status);
