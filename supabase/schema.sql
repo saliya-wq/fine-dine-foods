@@ -158,6 +158,27 @@ alter table customers add column if not exists installed_pwa boolean not null de
 alter table customers add column if not exists installed_at  timestamptz;
 alter table customers add column if not exists push_opted_in boolean not null default false;
 
+-- ── Staff login keys (Phase 3) ────────────────────────────────────────────
+-- Private table: no public RLS policies. Only the SHA-256 hash of each key is
+-- stored, so a database leak does not hand over working logins and a lost key
+-- cannot be recovered — only revoked and reissued. `key_prefix` is the first
+-- segment kept in the clear purely so the UI can tell keys apart.
+-- Roles: sysadmin | admin | manager | rider. Customers are NOT in this table;
+-- they have no key and are identified by phone at order time.
+create table if not exists staff_keys (
+  id uuid primary key default gen_random_uuid()
+);
+alter table staff_keys add column if not exists role         text not null default 'rider';
+alter table staff_keys add column if not exists name         text not null default '';
+alter table staff_keys add column if not exists key_hash     text;
+alter table staff_keys add column if not exists key_prefix   text;
+alter table staff_keys add column if not exists active       boolean not null default true;
+alter table staff_keys add column if not exists created_at   timestamptz not null default now();
+alter table staff_keys add column if not exists last_used_at timestamptz;
+alter table staff_keys add column if not exists created_by   text;
+alter table staff_keys enable row level security;
+create unique index if not exists staff_keys_hash_idx on staff_keys (key_hash);
+
 -- ── Seed: categories ──────────────────────────────────────────────────────
 insert into categories (id, name, sort_order) values
   ('starters', 'Starters', 1),
