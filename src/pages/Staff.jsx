@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStaff } from '../staffSession.jsx'
 import ManagerConsole from './ManagerConsole.jsx'
+import RiderPortal from './RiderPortal.jsx'
 
 export default function Staff() {
   const { staff, signIn, signOut } = useStaff()
@@ -11,13 +12,7 @@ export default function Staff() {
   if (staff.role === 'rider') {
     return (
       <Shell staff={staff} onSignOut={signOut}>
-        <div className="bg-white border border-calista-ink/10 rounded-lg p-6 text-center">
-          <h2 className="font-display text-2xl mb-2">Rider portal coming soon</h2>
-          <p className="text-calista-ink/60 text-sm">
-            Your key works — the delivery queue isn't built yet. Ask the manager for your runs in the
-            meantime.
-          </p>
-        </div>
+        <RiderPortal />
       </Shell>
     )
   }

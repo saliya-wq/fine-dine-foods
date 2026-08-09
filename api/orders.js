@@ -3,6 +3,36 @@ import { pipelineFor, statusLabel } from '../src/orderStatus.js'
 import { sendToCustomer } from '../lib/push.js'
 import { authorize } from '../lib/staff.js'
 
+/**
+ * Write a new status and notify the customer. Shared by the manager path and
+ * the rider path so both produce identical side effects. The push is
+ * best-effort: it must never fail the status change itself.
+ */
+async function applyStatus(supabase, id, status, previousStatus) {
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw error
+
+  let push = null
+  if (status !== previousStatus && data.customer_phone) {
+    push = await sendToCustomer(data.customer_phone, {
+      title: `Order ${data.id} — ${statusLabel(status)}`,
+      body: customerMessage(status, data.mode),
+      url: `/track/${data.id}`,
+      tag: `order-${data.id}`
+    }).catch((err) => {
+      console.error('status push failed:', err)
+      return null
+    })
+  }
+
+  return { order: toAdminOrder(data), push }
+}
+
 const URL = process.env.SUPABASE_URL
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -156,30 +186,56 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: `Status "${status}" is not valid for a ${existing.mode} order.` })
         }
 
+        const result = await applyStatus(supabase, id, status, existing.status)
+        return res.status(200).json(result)
+      }
+
+      // ── Rider: only their own runs ────────────────────────────────────
+      case 'myDeliveries': {
+        const staff = await authorize(supabase, req, 'rider')
+        if (!staff || staff.role !== 'rider') return res.status(401).json({ error: 'Unauthorized.' })
         const { data, error } = await supabase
           .from('orders')
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq('id', id)
           .select('*')
-          .single()
+          .eq('rider_id', staff.id)
+          .order('created_at', { ascending: true })
         if (error) throw error
+        const rows = (data || []).map(toAdminOrder)
+        return res.status(200).json({
+          orders: rows.filter((o) => o.status !== 'delivered' && o.status !== 'cancelled'),
+          completedToday: rows.filter(
+            (o) => o.status === 'delivered' && new Date(o.updatedAt).toDateString() === new Date().toDateString()
+          ).length
+        })
+      }
 
-        // Tell the customer, unless this was a no-op re-save. Best-effort:
-        // a push failure must never fail the status update itself.
-        let push = null
-        if (status !== existing.status && data.customer_phone) {
-          push = await sendToCustomer(data.customer_phone, {
-            title: `Order ${data.id} — ${statusLabel(status)}`,
-            body: customerMessage(status, data.mode),
-            url: `/track/${data.id}`,
-            tag: `order-${data.id}`
-          }).catch((err) => {
-            console.error('status push failed:', err)
-            return null
-          })
+      // ── Rider: the two transitions a rider actually owns ──────────────
+      // Scoped hard: only their own order, and only these two states, so a
+      // rider key can never move an order through the kitchen or cancel it.
+      case 'riderStatus': {
+        const staff = await authorize(supabase, req, 'rider')
+        if (!staff || staff.role !== 'rider') return res.status(401).json({ error: 'Unauthorized.' })
+        const id = String(body.id || '').trim().toUpperCase()
+        const status = String(body.status || '').trim()
+        if (!['out_for_delivery', 'delivered'].includes(status)) {
+          return res.status(400).json({ error: 'Riders can only mark an order picked up or delivered.' })
         }
 
-        return res.status(200).json({ order: toAdminOrder(data), push })
+        const { data: existing, error: findErr } = await supabase
+          .from('orders')
+          .select('mode, status, rider_id')
+          .eq('id', id)
+          .maybeSingle()
+        if (findErr) throw findErr
+        if (!existing || existing.rider_id !== staff.id) {
+          return res.status(404).json({ error: 'That delivery is not assigned to you.' })
+        }
+        if (existing.status === 'cancelled') {
+          return res.status(400).json({ error: 'That order was cancelled.' })
+        }
+
+        const result = await applyStatus(supabase, id, status, existing.status)
+        return res.status(200).json(result)
       }
 
       // ── Manager+: put a delivery order in a rider's queue ─────────────
