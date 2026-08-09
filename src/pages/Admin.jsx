@@ -177,7 +177,161 @@ function Panel({ onLogout }) {
 
       <MenuManager />
 
+      <NotificationsSection />
+
       <CustomersSection />
+    </div>
+  )
+}
+
+// ── Push notifications: reach stats + promo broadcast ─────────────────────
+function NotificationsSection() {
+  const [stats, setStats] = useState(null)
+  const [title, setTitle] = useState('')
+  const [message, setMessage] = useState('')
+  const [url, setUrl] = useState('/promotions')
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+
+  const call = async (payload) => {
+    const res = await fetch('/api/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-password': sessionStorage.getItem(ADMIN_PW_KEY) || ''
+      },
+      body: JSON.stringify(payload)
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+    return data
+  }
+
+  useEffect(() => {
+    call({ action: 'stats' })
+      .then(setStats)
+      .catch((e) => setError(e.message))
+  }, [])
+
+  const send = async () => {
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const r = await call({ action: 'broadcast', title: title.trim(), body: message.trim(), url })
+      setResult(r)
+      setTitle('')
+      setMessage('')
+      setConfirming(false)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const ready = title.trim() && message.trim()
+  const reach = stats?.devices ?? 0
+
+  return (
+    <section className="mb-12">
+      <h2 className="font-display text-2xl text-calista-gold mb-4 border-b border-calista-ink/10 pb-2">
+        Notifications
+      </h2>
+
+      {stats && !stats.configured && (
+        <p className="mb-4 text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2">
+          Push is not configured on the server (VAPID keys missing) — broadcasts will fail.
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <Stat label="Devices subscribed" value={stats?.devices} />
+        <Stat label="Installed as app" value={stats?.installedDevices} />
+        <Stat label="Known customers" value={stats?.identifiedCustomers} />
+        <Stat label="Customers w/ app" value={stats?.installedCustomers} />
+      </div>
+
+      <div className="bg-white border border-calista-ink/10 rounded-lg p-4 space-y-3">
+        <p className="font-semibold text-sm">Send a promotion</p>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={60}
+          placeholder="Title — e.g. Weekend special"
+          className="w-full px-4 py-3 border border-calista-ink/20 rounded-lg focus:outline-none focus:border-calista-gold"
+        />
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={3}
+          maxLength={160}
+          placeholder="Message — keep it short, this shows on a lock screen."
+          className="w-full px-4 py-3 border border-calista-ink/20 rounded-lg focus:outline-none focus:border-calista-gold"
+        />
+        <label className="block">
+          <span className="text-xs text-calista-ink/60 block mb-1">Opens when tapped</span>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="/promotions"
+            className="w-full px-4 py-2 border border-calista-ink/20 rounded-lg text-sm focus:outline-none focus:border-calista-gold"
+          />
+        </label>
+
+        {!confirming ? (
+          <button
+            onClick={() => setConfirming(true)}
+            disabled={!ready || busy}
+            className="bg-calista-ink text-calista-cream px-5 py-2.5 rounded-full text-sm font-semibold disabled:opacity-40"
+          >
+            Send to {reach} device{reach === 1 ? '' : 's'}…
+          </button>
+        ) : (
+          <div className="bg-calista-cream/70 border border-calista-ink/10 rounded-lg p-3">
+            <p className="text-sm mb-3">
+              This sends immediately to <strong>{reach} device{reach === 1 ? '' : 's'}</strong> and cannot be
+              recalled. Send it?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={send}
+                disabled={busy}
+                className="bg-calista-gold text-calista-ink px-5 py-2.5 rounded-full text-sm font-semibold disabled:opacity-50"
+              >
+                {busy ? 'Sending…' : 'Yes, send now'}
+              </button>
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={busy}
+                className="px-5 py-2.5 rounded-full text-sm font-semibold border border-calista-ink/20"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <p className="text-sm text-green-700">
+            Sent to {result.sent} device{result.sent === 1 ? '' : 's'}.
+            {result.failed > 0 && ` ${result.failed} failed.`}
+            {result.removed > 0 && ` ${result.removed} expired subscription(s) removed.`}
+          </p>
+        )}
+        {error && <p className="text-sm text-red-600">{error}</p>}
+      </div>
+    </section>
+  )
+}
+
+function Stat({ label, value }) {
+  return (
+    <div className="bg-calista-cream/60 border border-calista-ink/10 rounded-lg px-3 py-3">
+      <div className="font-display text-2xl">{value ?? '—'}</div>
+      <div className="text-xs text-calista-ink/60">{label}</div>
     </div>
   )
 }

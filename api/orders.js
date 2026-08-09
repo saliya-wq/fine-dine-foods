@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { pipelineFor } from '../src/orderStatus.js'
+import { pipelineFor, statusLabel } from '../src/orderStatus.js'
+import { sendToCustomer } from '../lib/push.js'
 
 const URL = process.env.SUPABASE_URL
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -142,7 +143,7 @@ export default async function handler(req, res) {
 
         const { data: existing, error: findErr } = await supabase
           .from('orders')
-          .select('mode')
+          .select('mode, status, customer_phone')
           .eq('id', id)
           .maybeSingle()
         if (findErr) throw findErr
@@ -160,7 +161,23 @@ export default async function handler(req, res) {
           .select('*')
           .single()
         if (error) throw error
-        return res.status(200).json({ order: toAdminOrder(data) })
+
+        // Tell the customer, unless this was a no-op re-save. Best-effort:
+        // a push failure must never fail the status update itself.
+        let push = null
+        if (status !== existing.status && data.customer_phone) {
+          push = await sendToCustomer(data.customer_phone, {
+            title: `Order ${data.id} — ${statusLabel(status)}`,
+            body: customerMessage(status, data.mode),
+            url: `/track/${data.id}`,
+            tag: `order-${data.id}`
+          }).catch((err) => {
+            console.error('status push failed:', err)
+            return null
+          })
+        }
+
+        return res.status(200).json({ order: toAdminOrder(data), push })
       }
 
       default:
@@ -169,6 +186,33 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('orders api error:', action, err)
     return res.status(500).json({ error: err.message || 'Server error.' })
+  }
+}
+
+// Customer-facing wording for each status. Deliberately plain — this is the
+// line that shows on a lock screen.
+const customerMessage = (status, mode) => {
+  switch (status) {
+    case 'received':
+      return 'We’ve got your order and it’s in the queue.'
+    case 'processing':
+      return 'The kitchen has started on your order.'
+    case 'ready_for_delivery':
+      return 'Your order is packed and waiting for a rider.'
+    case 'out_for_delivery':
+      return 'Your order is on its way to you.'
+    case 'delivered':
+      return 'Your order has been delivered. Enjoy!'
+    case 'ready_for_collection':
+      return 'Your order is ready — come and collect it whenever you like.'
+    case 'ready':
+      return 'Your order is ready.'
+    case 'served':
+      return 'Your order has been served. Enjoy!'
+    case 'cancelled':
+      return 'Your order was cancelled. Please call us if that’s unexpected.'
+    default:
+      return mode === 'delivery' ? 'There’s an update on your delivery.' : 'There’s an update on your order.'
   }
 }
 

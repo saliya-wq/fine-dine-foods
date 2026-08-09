@@ -5,6 +5,7 @@ import { useTable } from '../tableSession.jsx'
 import { useCustomers } from '../customerStore.jsx'
 import { useSettings, getTier, computeOrderTotals } from '../settingsStore.jsx'
 import { formatLKR } from '../format.js'
+import NotifyOptIn from '../NotifyOptIn.jsx'
 import {
   RESTAURANT_LOCATION,
   DELIVERY_RADIUS_KM,
@@ -180,6 +181,12 @@ export default function Checkout() {
           <p className="text-xs text-calista-ink/50 mb-8 max-w-md mx-auto bg-calista-cream border border-calista-ink/10 rounded-lg p-3">
             {warning}
           </p>
+        )}
+
+        {!warning && (
+          <div className="max-w-md mx-auto mb-8">
+            <NotifyOptIn compact />
+          </div>
         )}
         <div className="flex flex-wrap gap-2 justify-center">
           {!warning && (

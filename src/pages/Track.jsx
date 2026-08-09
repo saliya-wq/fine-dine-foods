@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { formatLKR } from '../format.js'
 import { pipelineFor, statusLabel, statusIndex } from '../orderStatus.js'
+import NotifyOptIn from '../NotifyOptIn.jsx'
 
 const POLL_MS = 15000
 
@@ -103,6 +104,12 @@ export default function Track() {
             )
           })}
         </ol>
+      )}
+
+      {!cancelled && !done && (
+        <div className="mb-8">
+          <NotifyOptIn />
+        </div>
       )}
 
       <div className="bg-white border border-calista-ink/10 rounded-lg overflow-hidden">

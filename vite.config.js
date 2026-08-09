@@ -24,7 +24,13 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}']
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // Push/notificationclick handlers live outside the generated SW.
+        importScripts: ['/push-sw.js'],
+        // Deep links (/track/:id, /menu, …) are client-side routes, so an
+        // offline navigation to one must fall back to the app shell.
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//]
       }
     })
   ]

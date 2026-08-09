@@ -134,6 +134,30 @@ alter table orders enable row level security;
 create index if not exists orders_created_at_idx on orders (created_at desc);
 create index if not exists orders_status_idx on orders (status);
 
+-- ── Push subscriptions (Phase 2) ──────────────────────────────────────────
+-- Private table: no public RLS policies. Written by api/push.js on the
+-- service-role key. One row per browser/device, so one customer can have
+-- several. `installed` records whether that device is running the app as an
+-- installed PWA (display-mode: standalone) at subscribe time.
+create table if not exists push_subscriptions (
+  endpoint text primary key
+);
+alter table push_subscriptions add column if not exists customer_phone text;
+alter table push_subscriptions add column if not exists p256dh         text;
+alter table push_subscriptions add column if not exists auth           text;
+alter table push_subscriptions add column if not exists user_agent     text;
+alter table push_subscriptions add column if not exists installed      boolean not null default false;
+alter table push_subscriptions add column if not exists created_at     timestamptz not null default now();
+alter table push_subscriptions add column if not exists last_seen      timestamptz not null default now();
+alter table push_subscriptions add column if not exists fail_count     int not null default 0;
+alter table push_subscriptions enable row level security;
+create index if not exists push_subs_phone_idx on push_subscriptions (customer_phone);
+
+-- Install / opt-in state, tracked per customer (Phase 2).
+alter table customers add column if not exists installed_pwa boolean not null default false;
+alter table customers add column if not exists installed_at  timestamptz;
+alter table customers add column if not exists push_opted_in boolean not null default false;
+
 -- ── Seed: categories ──────────────────────────────────────────────────────
 insert into categories (id, name, sort_order) values
   ('starters', 'Starters', 1),

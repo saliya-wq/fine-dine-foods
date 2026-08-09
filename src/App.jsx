@@ -16,6 +16,7 @@ import { useSettings, getTier, computeOrderTotals } from './settingsStore.jsx'
 import { formatLKR } from './format.js'
 import { BRAND_LOGO_ID } from './brand.js'
 import { useBrand } from './brandStore.jsx'
+import { syncInstallState } from './push.js'
 
 function Nav() {
   const { count } = useCart()
@@ -204,9 +205,16 @@ function WhatsAppFab() {
 
 export default function App() {
   const brand = useBrand()
+  const { active } = useCustomers()
   useEffect(() => {
     document.title = brand.name ? `${brand.name} — Menu & Online Ordering` : 'Menu & Online Ordering'
   }, [brand.name])
+
+  // Attach this device's push subscription / home-screen install to the
+  // customer once we know who they are. Silent, best-effort.
+  useEffect(() => {
+    if (active?.phone) syncInstallState(active.phone)
+  }, [active?.phone])
   return (
     <div className="min-h-screen flex flex-col">
       <Nav />
