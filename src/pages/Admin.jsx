@@ -8,12 +8,28 @@ import { useCustomers } from '../customerStore.jsx'
 import { formatLKR } from '../format.js'
 import { BRAND_LOGO_ID, BRAND_HERO_ID, BRAND_FIELDS } from '../brand.js'
 import { useBrandStore } from '../brandStore.jsx'
+import { pipelineFor, statusLabel } from '../orderStatus.js'
 
 const SESSION_KEY = 'calista_admin_authed'
 const ADMIN_PW_KEY = 'calista_admin_pw'
 
 // Set to true to show the Settings section (Business details, Service charge, Loyalty tiers).
 const SHOW_SETTINGS = false
+
+// Admin-gated POST. Every admin API takes the password as a header.
+async function adminPost(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-password': sessionStorage.getItem(ADMIN_PW_KEY) || ''
+    },
+    body: JSON.stringify(payload)
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+  return data
+}
 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
@@ -155,6 +171,8 @@ function Panel({ onLogout }) {
         logo/hero images are still saved only in this browser.)
       </p>
 
+      <OrdersSection />
+
       {SHOW_SETTINGS && <SettingsSection />}
 
       <h2 className="font-display text-2xl text-calista-gold mb-4 border-b border-calista-ink/10 pb-2">Brand</h2>
@@ -184,6 +202,208 @@ function Panel({ onLogout }) {
   )
 }
 
+// ── Live orders: advance status, which notifies the customer ──────────────
+// Interim console until the dedicated manager view exists. Moving an order
+// along here is what triggers the customer's push notification.
+const ORDERS_POLL_MS = 20000
+
+const isFinished = (o) => {
+  const steps = pipelineFor(o.mode)
+  return o.status === 'cancelled' || o.status === steps[steps.length - 1]
+}
+
+function OrdersSection() {
+  const [orders, setOrders] = useState([])
+  const [showDone, setShowDone] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [busyId, setBusyId] = useState(null)
+
+  const load = async () => {
+    try {
+      const { orders } = await adminPost('/api/orders', { action: 'list', limit: 100 })
+      setOrders(orders || [])
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    const t = setInterval(load, ORDERS_POLL_MS)
+    return () => clearInterval(t)
+  }, [])
+
+  const setStatus = async (order, status) => {
+    setBusyId(order.id)
+    setError(null)
+    try {
+      const { order: updated, push } = await adminPost('/api/orders', {
+        action: 'updateStatus',
+        id: order.id,
+        status
+      })
+      setOrders((list) => list.map((o) => (o.id === updated.id ? { ...o, ...updated, lastPush: push } : o)))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const visible = showDone ? orders : orders.filter((o) => !isFinished(o))
+  const activeCount = orders.filter((o) => !isFinished(o)).length
+
+  return (
+    <section className="mb-12">
+      <div className="flex items-center justify-between border-b border-calista-ink/10 pb-2 mb-4">
+        <h2 className="font-display text-2xl text-calista-gold">
+          Orders {activeCount > 0 && <span className="text-calista-ink/40 text-base">· {activeCount} active</span>}
+        </h2>
+        <div className="flex items-center gap-3">
+          <label className="text-xs text-calista-ink/60 flex items-center gap-1.5">
+            <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+            Show completed
+          </label>
+          <button onClick={load} className="text-sm px-3 py-1.5 border border-calista-ink/20 rounded-full hover:border-calista-gold">
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      {loading && <p className="text-sm text-calista-ink/50">Loading orders…</p>}
+      {!loading && visible.length === 0 && (
+        <p className="text-sm text-calista-ink/50">
+          {orders.length === 0 ? 'No orders yet.' : 'No active orders — tick "Show completed" to see past ones.'}
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {visible.map((o) => (
+          <OrderCard key={o.id} order={o} busy={busyId === o.id} onSetStatus={setStatus} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function OrderCard({ order, busy, onSetStatus }) {
+  const steps = pipelineFor(order.mode)
+  const cancelled = order.status === 'cancelled'
+  const currentIndex = steps.indexOf(order.status)
+  const next = currentIndex >= 0 && currentIndex < steps.length - 1 ? steps[currentIndex + 1] : null
+
+  return (
+    <div className={`bg-white border rounded-lg p-4 ${cancelled ? 'border-red-200 opacity-70' : 'border-calista-ink/10'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+        <div className="min-w-0">
+          <span className="font-semibold mr-2">{order.id}</span>
+          <span className="text-xs uppercase tracking-wider bg-calista-ink text-calista-cream rounded-full px-2 py-0.5">
+            {order.mode === 'table' ? `Table ${order.table}` : order.mode}
+          </span>
+          <div className="text-sm text-calista-ink/70 mt-1">
+            {order.customerName || 'Guest'}
+            {order.customerPhone && (
+              <>
+                {' · '}
+                <a href={`tel:${order.customerPhone}`} className="hover:text-calista-gold">{order.customerPhone}</a>
+              </>
+            )}
+          </div>
+          <div className="text-xs text-calista-ink/50">
+            {new Date(order.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+            {order.requestedTime ? ` · wants ${order.requestedTime}` : ''}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-semibold">{formatLKR(order.total)}</div>
+          {order.outOfZone && <div className="text-xs text-amber-700">outside zone</div>}
+        </div>
+      </div>
+
+      <div className="text-sm text-calista-ink/80 mb-2">
+        {order.items.map((i) => `${i.qty}× ${i.name}`).join(', ')}
+      </div>
+
+      {(order.address || order.location) && (
+        <div className="text-xs text-calista-ink/60 mb-2">
+          {order.address}
+          {order.location && (
+            <>
+              {order.address ? ' · ' : ''}
+              <a href={order.location} target="_blank" rel="noopener noreferrer" className="text-calista-gold font-semibold">
+                Map{order.deliveryDistanceKm != null ? ` (${order.deliveryDistanceKm} km)` : ''} →
+              </a>
+            </>
+          )}
+        </div>
+      )}
+
+      {order.notes && (
+        <div className="text-xs bg-calista-cream/70 rounded px-2 py-1.5 mb-2 whitespace-pre-line">{order.notes}</div>
+      )}
+
+      {cancelled ? (
+        <p className="text-sm text-red-600 font-semibold">Cancelled</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {steps.map((s, i) => {
+              const isCurrent = s === order.status
+              const isPast = currentIndex >= 0 && i < currentIndex
+              return (
+                <button
+                  key={s}
+                  onClick={() => !isCurrent && onSetStatus(order, s)}
+                  disabled={busy || isCurrent}
+                  className={`text-xs px-2.5 py-1.5 rounded-full border transition disabled:opacity-100 ${
+                    isCurrent
+                      ? 'bg-calista-gold border-calista-gold text-calista-ink font-semibold'
+                      : isPast
+                        ? 'border-calista-ink/15 text-calista-ink/40 hover:border-calista-gold'
+                        : 'border-calista-ink/20 hover:border-calista-gold'
+                  }`}
+                >
+                  {statusLabel(s)}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex items-center gap-3">
+            {next && (
+              <button
+                onClick={() => onSetStatus(order, next)}
+                disabled={busy}
+                className="bg-calista-ink text-calista-cream px-4 py-2 rounded-full text-sm font-semibold disabled:opacity-50"
+              >
+                {busy ? 'Saving…' : `Mark ${statusLabel(next)} →`}
+              </button>
+            )}
+            <button
+              onClick={() => onSetStatus(order, 'cancelled')}
+              disabled={busy}
+              className="text-xs text-calista-ink/40 hover:text-red-600 disabled:opacity-50"
+            >
+              Cancel order
+            </button>
+            {order.lastPush && (
+              <span className="text-xs text-calista-ink/50">
+                {order.lastPush.sent > 0
+                  ? `notified ${order.lastPush.sent} device${order.lastPush.sent === 1 ? '' : 's'}`
+                  : 'no devices subscribed'}
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Push notifications: reach stats + promo broadcast ─────────────────────
 function NotificationsSection() {
   const [stats, setStats] = useState(null)
@@ -195,19 +415,7 @@ function NotificationsSection() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
-  const call = async (payload) => {
-    const res = await fetch('/api/push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-password': sessionStorage.getItem(ADMIN_PW_KEY) || ''
-      },
-      body: JSON.stringify(payload)
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
-    return data
-  }
+  const call = (payload) => adminPost('/api/push', payload)
 
   useEffect(() => {
     call({ action: 'stats' })
