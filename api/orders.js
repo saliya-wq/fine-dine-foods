@@ -3,6 +3,7 @@ import { pipelineFor, statusLabel } from '../src/orderStatus.js'
 import { sendToCustomer } from '../lib/push.js'
 import { authorize } from '../lib/staff.js'
 import { customerActor, logOrderEvent } from '../lib/audit.js'
+import { payhereConfigured } from '../lib/payhere.js'
 
 /**
  * Write a new status, record who did it, and notify the customer. Shared by
@@ -126,8 +127,10 @@ export default async function handler(req, res) {
 
         // Dine-in is always settled at the restaurant; pick-up and delivery
         // choose online or cash at checkout.
-        const paymentType =
-          mode === 'table' ? 'at_restaurant' : body.paymentType === 'online' ? 'online' : 'cash'
+        // Fall back to cash if the gateway isn't configured — a stale client
+        // must never be able to create an order nobody can pay for.
+        const wantsOnline = body.paymentType === 'online' && payhereConfigured()
+        const paymentType = mode === 'table' ? 'at_restaurant' : wantsOnline ? 'online' : 'cash'
 
         const row = {
           id: newOrderId(),

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useCart } from '../cart.jsx'
 import { useTable } from '../tableSession.jsx'
@@ -25,7 +25,8 @@ export default function Checkout() {
     sessionStorage.getItem('calista_fulfillment') === 'delivery' ? 'delivery' : 'pickup'
   )
   const [placed, setPlaced] = useState(null)
-  const [payWith, setPayWith] = useState('online')
+  const [payWith, setPayWith] = useState('cash')
+  const [onlineAvailable, setOnlineAvailable] = useState(false)
   const [paymentPending, setPaymentPending] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
@@ -41,6 +42,24 @@ export default function Checkout() {
     email: '',
     location: active?.location || ''
   })
+
+  // Only offer online payment if the gateway is actually wired up, and make
+  // it the default once it is.
+  useEffect(() => {
+    fetch('/api/payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'config' })
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.online) {
+          setOnlineAvailable(true)
+          setPayWith('online')
+        }
+      })
+      .catch(() => setOnlineAvailable(false))
+  }, [])
 
   const shareLocation = () => {
     if (!navigator.geolocation) {
@@ -478,6 +497,7 @@ export default function Checkout() {
           textarea
         />
 
+        {onlineAvailable && (
         <div>
           <span className="text-sm font-medium block mb-2">How would you like to pay?</span>
           <div className="grid grid-cols-2 gap-2">
@@ -505,6 +525,7 @@ export default function Checkout() {
             ))}
           </div>
         </div>
+        )}
 
         {payWith === 'online' && (
           <>

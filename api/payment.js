@@ -22,6 +22,11 @@ export default async function handler(req, res) {
   const supabase = admin()
 
   try {
+    // Lets the checkout hide online payment when the gateway isn't wired up,
+    // rather than stranding orders at `pending` with no way to pay.
+    if (body.action === 'config') {
+      return res.status(200).json({ online: payhereConfigured() })
+    }
     if (body.action !== 'start') return res.status(400).json({ error: 'Unknown action.' })
     if (!payhereConfigured()) {
       return res.status(503).json({ error: 'Online payment is not configured yet. Please choose cash instead.' })
