@@ -312,6 +312,60 @@ export default async function handler(req, res) {
         return res.status(200).json(result)
       }
 
+      // ── Record cash changing hands ────────────────────────────────────
+      // A manager can settle any order; a rider only the run they carried.
+      // Reversing a mistake is manager+ only, so a rider can't quietly undo
+      // money they were supposed to hand in.
+      case 'markPaid': {
+        const actor = await authorize(supabase, req, 'rider')
+        if (!actor) return res.status(401).json({ error: 'Unauthorized.' })
+        const id = String(body.id || '').trim().toUpperCase()
+        if (!id) return res.status(400).json({ error: 'Order id required.' })
+        const paid = body.paid !== false
+
+        const { data: order, error: findErr } = await supabase
+          .from('orders')
+          .select('id, rider_id, payment_type, payment_status, total')
+          .eq('id', id)
+          .maybeSingle()
+        if (findErr) throw findErr
+        if (!order) return res.status(404).json({ error: 'Order not found.' })
+
+        const isRider = actor.role === 'rider'
+        if (isRider && order.rider_id !== actor.id) {
+          return res.status(404).json({ error: 'That delivery is not assigned to you.' })
+        }
+        if (isRider && !paid) {
+          return res.status(403).json({ error: 'Only a manager can reverse a payment.' })
+        }
+        if (order.payment_type === 'online') {
+          return res.status(400).json({ error: 'That order is paid through the gateway, not by hand.' })
+        }
+
+        const { data, error } = await supabase
+          .from('orders')
+          .update({
+            payment_status: paid ? 'paid' : 'due',
+            payment_method: paid ? 'cash' : null,
+            paid_at: paid ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', id)
+          .select('*')
+          .single()
+        if (error) throw error
+
+        await logOrderEvent(supabase, {
+          orderId: id,
+          actor,
+          event: 'payment',
+          toStatus: paid ? 'paid' : 'due',
+          detail: paid ? `Cash collected · ${order.total}` : 'Payment reversed — marked unpaid'
+        })
+
+        return res.status(200).json({ order: toAdminOrder(data) })
+      }
+
       // ── Manager+: put a delivery order in a rider's queue ─────────────
       case 'assignRider': {
         const actor = await requireStaff()

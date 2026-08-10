@@ -103,6 +103,7 @@ export default function ManagerConsole() {
 
   const setStatus = (order, status) => act({ action: 'updateStatus', id: order.id, status }, order.id)
   const assign = (order, riderId) => act({ action: 'assignRider', id: order.id, riderId: riderId || null }, order.id)
+  const setPaid = (order, paid) => act({ action: 'markPaid', id: order.id, paid }, order.id)
 
   const toggleSound = () => {
     const next = !sound
@@ -166,6 +167,7 @@ export default function ManagerConsole() {
                   busy={busyId === o.id}
                   onSetStatus={setStatus}
                   onAssign={assign}
+                  onSetPaid={setPaid}
                 />
               ))}
             </div>
@@ -188,7 +190,15 @@ export default function ManagerConsole() {
           {showDone && (
             <div className="space-y-3 mt-3">
               {finished.map((o) => (
-                <OrderCard key={o.id} order={o} riders={riders} busy={busyId === o.id} onSetStatus={setStatus} onAssign={assign} />
+                <OrderCard
+                  key={o.id}
+                  order={o}
+                  riders={riders}
+                  busy={busyId === o.id}
+                  onSetStatus={setStatus}
+                  onAssign={assign}
+                  onSetPaid={setPaid}
+                />
               ))}
             </div>
           )}
@@ -198,7 +208,7 @@ export default function ManagerConsole() {
   )
 }
 
-function OrderCard({ order, riders, busy, onSetStatus, onAssign }) {
+function OrderCard({ order, riders, busy, onSetStatus, onAssign, onSetPaid }) {
   const steps = pipelineFor(order.mode)
   const cancelled = order.status === 'cancelled'
   const index = steps.indexOf(order.status)
@@ -323,6 +333,25 @@ function OrderCard({ order, riders, busy, onSetStatus, onAssign }) {
           )}
 
           {blockOut && <span className="text-xs text-amber-700">Assign a rider first</span>}
+
+          {order.paymentStatus !== 'paid' && order.paymentType !== 'online' && (
+            <button
+              onClick={() => onSetPaid(order, true)}
+              disabled={busy}
+              className="px-4 py-2 rounded-full text-sm font-semibold border border-green-600/40 text-green-700 hover:bg-green-50 disabled:opacity-50"
+            >
+              Cash received
+            </button>
+          )}
+          {order.paymentStatus === 'paid' && order.paymentMethod === 'cash' && (
+            <button
+              onClick={() => onSetPaid(order, false)}
+              disabled={busy}
+              className="text-xs text-calista-ink/40 hover:text-amber-700 disabled:opacity-50"
+            >
+              Undo payment
+            </button>
+          )}
 
           <button
             onClick={() => onSetStatus(order, 'cancelled')}

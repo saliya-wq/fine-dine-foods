@@ -30,10 +30,13 @@ export default function RiderPortal() {
     return () => clearInterval(t)
   }, [load])
 
-  const mark = async (order, status) => {
+  const mark = async (order, status, collectCash = false) => {
     setBusyId(order.id)
     setError(null)
     try {
+      // Settle the cash first: if the status write then fails, the money is
+      // still recorded rather than lost.
+      if (collectCash) await staffPost('/api/orders', { action: 'markPaid', id: order.id, paid: true })
       await staffPost('/api/orders', { action: 'riderStatus', id: order.id, status })
       await load()
     } catch (e) {
@@ -83,6 +86,7 @@ export default function RiderPortal() {
 function RunCard({ order, busy, onMark }) {
   const onTheWay = order.status === 'out_for_delivery'
   const ready = order.status === 'ready_for_delivery'
+  const collectCash = order.paymentStatus !== 'paid'
 
   return (
     <div className={`bg-white border rounded-lg p-4 ${onTheWay ? 'border-calista-gold' : 'border-calista-ink/10'}`}>
@@ -93,6 +97,9 @@ function RunCard({ order, busy, onMark }) {
         </div>
         <div className="text-right shrink-0">
           <div className="font-semibold">{formatLKR(order.total)}</div>
+          <div className={`text-xs font-semibold ${collectCash ? 'text-amber-700' : 'text-green-700'}`}>
+            {collectCash ? 'COLLECT CASH' : 'Already paid'}
+          </div>
           <div className="text-xs text-calista-ink/50">
             {onTheWay ? 'On the way' : ready ? 'Ready to collect' : 'Being prepared'}
           </div>
@@ -142,13 +149,28 @@ function RunCard({ order, busy, onMark }) {
       </div>
 
       {onTheWay ? (
-        <button
-          onClick={() => onMark(order, 'delivered')}
-          disabled={busy}
-          className="w-full bg-calista-gold text-calista-ink py-3.5 rounded-full font-semibold disabled:opacity-50"
-        >
-          {busy ? 'Saving…' : 'Mark delivered ✓'}
-        </button>
+        <>
+          <button
+            onClick={() => onMark(order, 'delivered', collectCash)}
+            disabled={busy}
+            className="w-full bg-calista-gold text-calista-ink py-3.5 rounded-full font-semibold disabled:opacity-50"
+          >
+            {busy
+              ? 'Saving…'
+              : collectCash
+                ? `Delivered · ${formatLKR(order.total)} collected ✓`
+                : 'Mark delivered ✓'}
+          </button>
+          {collectCash && (
+            <button
+              onClick={() => onMark(order, 'delivered', false)}
+              disabled={busy}
+              className="w-full mt-2 text-xs text-calista-ink/40 hover:text-amber-700 disabled:opacity-50"
+            >
+              Delivered but couldn't collect payment
+            </button>
+          )}
+        </>
       ) : (
         <button
           onClick={() => onMark(order, 'out_for_delivery')}

@@ -169,6 +169,15 @@ export default function Track() {
           {order.serviceCharge > 0 && <Row label="Service charge" value={formatLKR(order.serviceCharge)} />}
           {order.deliveryFee > 0 && <Row label="Delivery" value={formatLKR(order.deliveryFee)} />}
           <Row label="Total" value={formatLKR(order.total)} bold />
+          <p className="text-xs text-calista-ink/60 pt-1">
+            {order.paymentStatus === 'paid'
+              ? '✓ Paid'
+              : order.mode === 'delivery'
+                ? 'Please have the cash ready for the rider.'
+                : order.mode === 'table'
+                  ? 'Settle at the restaurant.'
+                  : 'Pay when you collect.'}
+          </p>
         </div>
       </div>
 
