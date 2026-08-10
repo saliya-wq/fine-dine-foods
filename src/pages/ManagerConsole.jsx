@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { staffPost } from '../staffSession.jsx'
 import { formatLKR } from '../format.js'
 import { pipelineFor, statusLabel } from '../orderStatus.js'
+import Takings from './Takings.jsx'
 
 const POLL_MS = 15000
 
@@ -46,6 +47,33 @@ function ping() {
 }
 
 export default function ManagerConsole() {
+  const [tab, setTab] = useState('queue')
+  return (
+    <div>
+      <div className="flex gap-1 mb-5 border-b border-calista-ink/10">
+        {[
+          ['queue', 'Queue'],
+          ['takings', 'Takings']
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition ${
+              tab === id
+                ? 'border-calista-gold text-calista-ink'
+                : 'border-transparent text-calista-ink/50 hover:text-calista-ink'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'queue' ? <OrderQueue /> : <Takings />}
+    </div>
+  )
+}
+
+function OrderQueue() {
   const [orders, setOrders] = useState([])
   const [riders, setRiders] = useState([])
   const [loading, setLoading] = useState(true)

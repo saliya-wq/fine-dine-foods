@@ -59,6 +59,18 @@ const newOrderId = () => {
 }
 
 const int = (n) => Math.round(Number(n) || 0)
+
+// Sri Lanka is UTC+5:30 and observes no DST, so a fixed offset is exact.
+// Everything date-shaped in reporting must go through this — grouping raw UTC
+// puts every order placed after 18:30 UTC on the wrong business day.
+const COLOMBO_OFFSET_MS = 5.5 * 60 * 60 * 1000
+const colomboDate = (iso) => new Date(new Date(iso).getTime() + COLOMBO_OFFSET_MS).toISOString().slice(0, 10)
+
+/** The last `n` Colombo dates, oldest first, ending today. */
+const recentColomboDates = (n) => {
+  const todayMs = new Date(colomboDate(new Date().toISOString()) + 'T00:00:00Z').getTime()
+  return Array.from({ length: n }, (_, i) => new Date(todayMs - (n - 1 - i) * 86400000).toISOString().slice(0, 10))
+}
 const num = (n) => Number(n) || 0
 
 // What the customer sees on the tracking page. Never exposes phone or rider.
@@ -238,6 +250,71 @@ export default async function handler(req, res) {
 
         const result = await applyStatus(supabase, id, status, existing.status, actor)
         return res.status(200).json(result)
+      }
+
+      // ── Manager+: daily takings ───────────────────────────────────────
+      // Grouped by the ORDER's Colombo date, not UTC — a 1am order otherwise
+      // lands on the previous day and the till never reconciles.
+      case 'takings': {
+        if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
+        const days = Math.min(Math.max(int(body.days) || 7, 1), 62)
+        // Reach back an extra day so the oldest Colombo day is complete.
+        const since = new Date(Date.now() - (days + 1) * 86400000).toISOString()
+
+        const { data, error } = await supabase
+          .from('orders')
+          .select('id, created_at, mode, status, total, payment_type, payment_status')
+          .gte('created_at', since)
+          .order('created_at', { ascending: true })
+        if (error) throw error
+
+        const wanted = recentColomboDates(days)
+        const blank = () => ({
+          orders: 0,
+          cancelled: 0,
+          revenue: 0,
+          collected: 0,
+          outstanding: 0,
+          cash: 0,
+          online: 0,
+          atRestaurant: 0,
+          delivery: 0,
+          pickup: 0,
+          table: 0
+        })
+        const byDate = Object.fromEntries(wanted.map((d) => [d, blank()]))
+
+        for (const o of data || []) {
+          const day = byDate[colomboDate(o.created_at)]
+          if (!day) continue
+          if (o.status === 'cancelled') {
+            day.cancelled++
+            continue
+          }
+          // Unpaid online orders were never really placed — exclude entirely.
+          if (o.payment_type === 'online' && o.payment_status === 'pending') continue
+
+          const total = Number(o.total) || 0
+          day.orders++
+          day.revenue += total
+          day[o.mode] = (day[o.mode] || 0) + total
+          if (o.payment_status === 'paid') {
+            day.collected += total
+            if (o.payment_type === 'online') day.online += total
+            else if (o.payment_type === 'cash') day.cash += total
+            else day.atRestaurant += total
+          } else {
+            day.outstanding += total
+          }
+        }
+
+        const series = wanted.map((date) => ({ date, ...byDate[date] }))
+        const totals = series.reduce((acc, d) => {
+          for (const k of Object.keys(blank())) acc[k] = (acc[k] || 0) + d[k]
+          return acc
+        }, {})
+
+        return res.status(200).json({ days: series, totals, today: series[series.length - 1] })
       }
 
       // ── Manager+: who touched this order ──────────────────────────────
