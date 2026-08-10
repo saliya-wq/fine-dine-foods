@@ -240,6 +240,7 @@ function OrderCard({ order, riders, busy, onSetStatus, onAssign }) {
         </div>
         <div className="text-right shrink-0">
           <div className="font-semibold">{formatLKR(order.total)}</div>
+          <PaymentBadge order={order} />
           <div className="text-xs text-calista-ink/50">{statusLabel(order.status)}</div>
           {order.outOfZone && <div className="text-xs text-amber-700">outside zone</div>}
         </div>
@@ -344,6 +345,20 @@ function OrderCard({ order, riders, busy, onSetStatus, onAssign }) {
       <History orderId={order.id} />
     </div>
   )
+}
+
+// Whoever hands the order over needs to know if money is still owed.
+function PaymentBadge({ order }) {
+  if (order.paymentStatus === 'paid') {
+    return (
+      <div className="text-xs text-green-700 font-semibold">
+        ✓ Paid{order.paymentMethod ? ` · ${order.paymentMethod}` : ''}
+      </div>
+    )
+  }
+  if (order.paymentType === 'cash') return <div className="text-xs text-amber-700 font-semibold">Cash — collect</div>
+  if (order.paymentType === 'at_restaurant') return <div className="text-xs text-calista-ink/50">Pay at restaurant</div>
+  return <div className="text-xs text-red-600 font-semibold">Unpaid</div>
 }
 
 // Collapsed by default — one fetch per order, only when someone asks.

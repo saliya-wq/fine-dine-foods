@@ -67,6 +67,8 @@ const toPublicOrder = (r) => ({
   mode: r.mode,
   status: r.status,
   table: r.table_no,
+  paymentType: r.payment_type,
+  paymentStatus: r.payment_status,
   address: r.address || '',
   requestedTime: r.requested_time || '',
   notes: r.notes || '',
@@ -83,6 +85,11 @@ const toAdminOrder = (r) => ({
   ...toPublicOrder(r),
   customerName: r.customer_name || '',
   customerPhone: r.customer_phone || '',
+  customerEmail: r.customer_email || '',
+  paymentType: r.payment_type,
+  paymentStatus: r.payment_status,
+  paymentMethod: r.payment_method || '',
+  paidAt: r.paid_at,
   location: r.location || '',
   deliveryDistanceKm: r.delivery_distance_km,
   outOfZone: r.out_of_zone,
@@ -117,6 +124,11 @@ export default async function handler(req, res) {
         }
         const mode = ['delivery', 'pickup', 'table'].includes(body.mode) ? body.mode : 'pickup'
 
+        // Dine-in is always settled at the restaurant; pick-up and delivery
+        // choose online or cash at checkout.
+        const paymentType =
+          mode === 'table' ? 'at_restaurant' : body.paymentType === 'online' ? 'online' : 'cash'
+
         const row = {
           id: newOrderId(),
           mode,
@@ -124,6 +136,11 @@ export default async function handler(req, res) {
           table_no: mode === 'table' && body.table != null ? int(body.table) : null,
           customer_name: body.customer?.name || body.name || null,
           customer_phone: body.customer?.phone || body.phone || null,
+          customer_email: body.email || null,
+          payment_type: paymentType,
+          // Online orders stay `pending` and out of the manager queue until
+          // PayHere confirms; everything else is simply due on handover.
+          payment_status: paymentType === 'online' ? 'pending' : 'due',
           address: body.address || null,
           location: body.location || null,
           delivery_distance_km: body.deliveryDistanceKm != null ? num(body.deliveryDistanceKm) : null,
@@ -180,6 +197,9 @@ export default async function handler(req, res) {
         if (!(await requireStaff())) return res.status(401).json({ error: 'Unauthorized.' })
         const limit = Math.min(int(body.limit) || 100, 500)
         let q = supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(limit)
+        // An online order the customer never paid for is not a real order —
+        // keep it out of the queue unless somebody explicitly asks for them.
+        if (!body.includeUnpaid) q = q.neq('payment_status', 'pending')
         if (body.status) q = q.eq('status', body.status)
         if (body.mode) q = q.eq('mode', body.mode)
         const { data, error } = await q

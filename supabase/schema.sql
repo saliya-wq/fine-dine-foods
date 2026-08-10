@@ -179,6 +179,20 @@ alter table staff_keys add column if not exists created_by   text;
 alter table staff_keys enable row level security;
 create unique index if not exists staff_keys_hash_idx on staff_keys (key_hash);
 
+-- ── Payments (Phase 5, PayHere) ───────────────────────────────────────────
+-- payment_type:   online | cash | at_restaurant (dine-in QR)
+-- payment_status: due | pending | paid | failed | cancelled | chargedback
+-- An online order sits at `pending` and is deliberately hidden from the
+-- manager queue until PayHere's notify callback confirms it — that is the
+-- "payment approved -> notify manager -> authorise" step.
+alter table orders add column if not exists payment_type   text not null default 'at_restaurant';
+alter table orders add column if not exists payment_status text not null default 'due';
+alter table orders add column if not exists payment_id     text;
+alter table orders add column if not exists payment_method text;
+alter table orders add column if not exists paid_at        timestamptz;
+alter table orders add column if not exists customer_email text;
+alter table customers add column if not exists email text;
+
 -- ── Order audit trail ─────────────────────────────────────────────────────
 -- Append-only: who changed what on an order, and when. Private table, no
 -- public RLS policies. Written best-effort by api/orders.js — an audit

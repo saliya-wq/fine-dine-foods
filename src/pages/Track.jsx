@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { formatLKR } from '../format.js'
 import { pipelineFor, statusLabel, statusIndex } from '../orderStatus.js'
 import NotifyOptIn from '../NotifyOptIn.jsx'
+import { payForOrder } from '../payhere.js'
 
 const POLL_MS = 15000
 
@@ -11,6 +12,8 @@ export default function Track() {
   const [order, setOrder] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +56,23 @@ export default function Track() {
   }
 
   const cancelled = order.status === 'cancelled'
+  const awaitingPayment = order.paymentType === 'online' && order.paymentStatus !== 'paid'
+
+  const payNow = async () => {
+    setPaying(true)
+    setPayError(null)
+    try {
+      await payForOrder(order.id)
+      // Confirmation arrives server-side via PayHere's callback, so just
+      // re-read the order rather than assuming it worked.
+      await load()
+    } catch (err) {
+      setPayError(err.message || 'The payment could not be completed.')
+    } finally {
+      setPaying(false)
+    }
+  }
+
   const steps = pipelineFor(order.mode)
   const current = statusIndex(order.mode, order.status)
   const done = current >= steps.length - 1
@@ -67,6 +87,23 @@ export default function Track() {
         Placed {new Date(order.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
         {order.requestedTime ? ` · requested for ${order.requestedTime}` : ''}
       </p>
+
+      {awaitingPayment && !cancelled && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-4 mb-8">
+          <p className="font-semibold text-amber-900 mb-1">Payment not completed</p>
+          <p className="text-sm text-amber-800 mb-3">
+            We've saved your order, but the kitchen won't start until it's paid.
+          </p>
+          <button
+            onClick={payNow}
+            disabled={paying}
+            className="bg-calista-ink text-calista-cream px-5 py-2.5 rounded-full text-sm font-semibold disabled:opacity-50"
+          >
+            {paying ? 'Opening payment…' : `Pay ${formatLKR(order.total)} now`}
+          </button>
+          {payError && <p className="text-sm text-red-600 mt-2">{payError}</p>}
+        </div>
+      )}
 
       {cancelled ? (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-8">

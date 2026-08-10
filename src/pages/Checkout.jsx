@@ -6,6 +6,7 @@ import { useCustomers } from '../customerStore.jsx'
 import { useSettings, getTier, computeOrderTotals } from '../settingsStore.jsx'
 import { formatLKR } from '../format.js'
 import NotifyOptIn from '../NotifyOptIn.jsx'
+import { payForOrder } from '../payhere.js'
 import {
   RESTAURANT_LOCATION,
   DELIVERY_RADIUS_KM,
@@ -24,6 +25,8 @@ export default function Checkout() {
     sessionStorage.getItem('calista_fulfillment') === 'delivery' ? 'delivery' : 'pickup'
   )
   const [placed, setPlaced] = useState(null)
+  const [payWith, setPayWith] = useState('online')
+  const [paymentPending, setPaymentPending] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [warning, setWarning] = useState(null)
@@ -35,6 +38,7 @@ export default function Checkout() {
     address: active?.address || '',
     time: '',
     notes: '',
+    email: '',
     location: active?.location || ''
   })
 
@@ -122,6 +126,8 @@ export default function Checkout() {
       outOfZone: effectiveMode === 'delivery' ? outOfZone : false,
       time: effectiveMode === 'table' ? null : form.time || null,
       notes: form.notes || null,
+      paymentType: isTable ? 'at_restaurant' : payWith,
+      email: !isTable && payWith === 'online' ? form.email || null : null,
       items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.qty })),
       customer: active
         ? { phone: active.phone, name: active.name, visits: active.visits, tier: tier?.name }
@@ -153,6 +159,18 @@ export default function Checkout() {
       }
     }
 
+    // Online orders are invisible to the kitchen until PayHere confirms, so
+    // hand straight over to the popup before showing the thank-you screen.
+    if (!isTable && payWith === 'online' && !warning) {
+      try {
+        const outcome = await payForOrder(orderId)
+        if (outcome === 'dismissed') setPaymentPending(true)
+      } catch (err) {
+        setPaymentPending(true)
+        setSubmitError(err.message || 'The payment could not be completed.')
+      }
+    }
+
     if (active) recordOrder(active.phone, totals.total, { address: form.address, location: form.location })
     setPlaced(orderId)
     clear()
@@ -165,11 +183,13 @@ export default function Checkout() {
         <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-calista-gold/20 flex items-center justify-center">
           <span className="text-calista-gold text-3xl">✓</span>
         </div>
-        <h1 className="font-display text-4xl mb-4">Thank you!</h1>
+        <h1 className="font-display text-4xl mb-4">{paymentPending ? 'Almost done' : 'Thank you!'}</h1>
         <p className="text-calista-ink/70 mb-2">
-          {isTable
-            ? 'Your order has been sent to the kitchen. A team member will be with you shortly.'
-            : 'Your order has been received.'}
+          {paymentPending
+            ? "Your order is saved but not paid yet — the kitchen won't start until payment goes through."
+            : isTable
+              ? 'Your order has been sent to the kitchen. A team member will be with you shortly.'
+              : 'Your order has been received.'}
         </p>
         <p className="text-calista-gold font-semibold text-lg mb-2">Order #{placed}</p>
         {isTable && (
@@ -458,6 +478,50 @@ export default function Checkout() {
           textarea
         />
 
+        <div>
+          <span className="text-sm font-medium block mb-2">How would you like to pay?</span>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: 'online', label: 'Pay online', hint: 'Card or mobile wallet' },
+              {
+                id: 'cash',
+                label: 'Cash',
+                hint: mode === 'delivery' ? 'Pay the rider' : 'Pay when you collect'
+              }
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setPayWith(opt.id)}
+                className={`p-3 rounded-lg border text-left transition ${
+                  payWith === opt.id
+                    ? 'border-calista-gold bg-calista-cream/60'
+                    : 'border-calista-ink/20 hover:border-calista-gold'
+                }`}
+              >
+                <span className="font-semibold block text-sm">{opt.label}</span>
+                <span className="text-xs text-calista-ink/60">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {payWith === 'online' && (
+          <>
+            <Field
+              label="Email for the receipt"
+              type="email"
+              value={form.email}
+              onChange={(v) => setForm((f) => ({ ...f, email: v }))}
+              required
+              placeholder="you@example.com"
+            />
+            <p className="-mt-2 text-xs text-calista-ink/50">
+              Required by our payment provider — your receipt goes here.
+            </p>
+          </>
+        )}
+
         <div className="bg-white border border-calista-ink/10 rounded-lg overflow-hidden">
           <div className="divide-y">
             {items.map((item) => (
@@ -502,7 +566,13 @@ export default function Checkout() {
           disabled={submitting || deliveryPinMissing}
           className="w-full bg-calista-gold text-calista-ink py-4 rounded-full font-semibold hover:bg-calista-ink hover:text-calista-cream transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Placing order…' : `Place order — ${formatLKR(totals.total)}`}
+          {submitting
+            ? payWith === 'online'
+              ? 'Opening payment…'
+              : 'Placing order…'
+            : payWith === 'online'
+              ? `Pay ${formatLKR(totals.total)}`
+              : `Place order — ${formatLKR(totals.total)}`}
         </button>
       </form>
     </div>
