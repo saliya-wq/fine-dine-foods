@@ -25,24 +25,25 @@ function Nav() {
   const brand = useBrand()
   const logo = getImage(BRAND_LOGO_ID, null)
   const link = ({ isActive }) =>
-    `px-3 py-2 text-sm font-medium transition ${
+    `px-2 sm:px-3 py-2 text-sm font-medium transition ${
       isActive ? 'text-calista-gold' : 'text-calista-cream/80 hover:text-calista-cream'
     }`
   return (
     <header className="bg-calista-ink text-calista-cream sticky top-0 z-40 shadow no-print">
-      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
+      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+        <Link to="/" className="flex items-center gap-2 min-w-0">
           {logo ? (
-            <img src={logo} alt={brand.name} className="h-9 w-9 object-cover rounded-full bg-calista-cream" />
+            <img src={logo} alt={brand.name} className="h-9 w-9 shrink-0 object-cover rounded-full bg-calista-cream" />
           ) : (
-            <span className="h-9 w-9 rounded-full bg-calista-gold text-calista-ink flex items-center justify-center font-display text-xl font-bold">
+            <span className="h-9 w-9 shrink-0 rounded-full bg-calista-gold text-calista-ink flex items-center justify-center font-display text-xl font-bold">
               {brand.name ? brand.name[0].toUpperCase() : '•'}
             </span>
           )}
-          <span className="font-display text-2xl tracking-wide">{brand.name || 'Your Restaurant'}</span>
+          <span className="font-display text-xl sm:text-2xl leading-tight tracking-wide">{brand.name || 'Your Restaurant'}</span>
         </Link>
-        <nav className="flex items-center gap-1">
-          <NavLink to="/" end className={link}>Home</NavLink>
+        <nav className="flex items-center shrink-0 sm:gap-1">
+          {/* The logo already goes home; on a phone there is no room for both. */}
+          <NavLink to="/" end className={(s) => `hidden sm:inline ${link(s)}`}>Home</NavLink>
           <NavLink to="/menu" className={link}>Menu</NavLink>
           <NavLink to="/promotions" className={link}>Promotions</NavLink>
           <NavLink to="/cart" className={link}>

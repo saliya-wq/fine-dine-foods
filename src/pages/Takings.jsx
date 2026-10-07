@@ -96,27 +96,30 @@ export default function Takings() {
           <caption className="sr-only">Daily takings for the last {range} days</caption>
           <thead>
             <tr className="text-xs text-calista-ink/50 border-b border-calista-ink/10">
-              <th scope="col" className="text-left font-medium px-4 py-2">Day</th>
+              <th scope="col" className="text-left font-medium px-3 sm:px-4 py-2">Day</th>
               <th scope="col" className="text-right font-medium px-2 py-2">Orders</th>
               <th scope="col" className="text-left font-medium px-2 py-2 w-1/2">Revenue</th>
-              <th scope="col" className="text-right font-medium px-4 py-2">Owed</th>
+              <th scope="col" className="text-right font-medium px-3 sm:px-4 py-2">Owed</th>
             </tr>
           </thead>
           <tbody>
             {days.map((d) => (
               <tr key={d.date} className="border-b border-calista-ink/5 last:border-0">
-                <th scope="row" className="text-left font-normal px-4 py-2 whitespace-nowrap">
+                <th scope="row" className="text-left font-normal px-3 sm:px-4 py-2 whitespace-nowrap">
                   {dayLabel(d.date, todayIso)}
                 </th>
                 <td className="text-right px-2 py-2 tabular-nums text-calista-ink/60">{d.orders || '—'}</td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">
-                    {/* Single series, so no legend; the value rides the bar tip. */}
+                    {/* Single series, so no legend; the value rides the bar tip.
+                        The bar scales within the cell minus room for that
+                        label, so the peak day's figure never spills into the
+                        Owed column on a phone. */}
                     <span
                       aria-hidden="true"
                       className="h-3 rounded-r-[4px] shrink-0"
                       style={{
-                        width: `${Math.max((d.revenue / peak) * 100, d.revenue > 0 ? 2 : 0)}%`,
+                        width: `calc((100% - 4rem) * ${Math.max(d.revenue / peak, d.revenue > 0 ? 0.02 : 0)})`,
                         backgroundColor: MARK
                       }}
                     />
@@ -125,7 +128,7 @@ export default function Takings() {
                     </span>
                   </div>
                 </td>
-                <td className="text-right px-4 py-2 tabular-nums">
+                <td className="text-right px-3 sm:px-4 py-2 tabular-nums">
                   {d.outstanding > 0 ? (
                     <span className="text-amber-700">{compact(d.outstanding)}</span>
                   ) : (
@@ -169,7 +172,7 @@ export default function Takings() {
 function Tile({ label, value, tone }) {
   return (
     <div className="bg-calista-cream/60 border border-calista-ink/10 rounded-lg px-3 py-3">
-      <div className={`text-xl font-semibold ${tone === 'warn' ? 'text-amber-700' : ''}`}>{value}</div>
+      <div className={`text-lg sm:text-xl font-semibold ${tone === 'warn' ? 'text-amber-700' : ''}`}>{value}</div>
       <div className="text-xs text-calista-ink/60">{label}</div>
     </div>
   )
