@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { staffPost } from '../staffSession.jsx'
+import { staffPost, useStaff } from '../staffSession.jsx'
 import { formatLKR } from '../format.js'
 import { pipelineFor, statusLabel } from '../orderStatus.js'
 import Takings from './Takings.jsx'
+import SiteSettings from './SiteSettings.jsx'
 
 const POLL_MS = 15000
 
@@ -47,14 +48,18 @@ function ping() {
 }
 
 export default function ManagerConsole() {
+  const { staff } = useStaff()
   const [tab, setTab] = useState('queue')
+  const tabs = [
+    ['queue', 'Queue'],
+    ['takings', 'Takings'],
+    // Site-wide settings are sysadmin-only; the API enforces this too.
+    ...(staff?.role === 'sysadmin' ? [['settings', 'Settings']] : [])
+  ]
   return (
     <div>
       <div className="flex gap-1 mb-5 border-b border-calista-ink/10">
-        {[
-          ['queue', 'Queue'],
-          ['takings', 'Takings']
-        ].map(([id, label]) => (
+        {tabs.map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -68,7 +73,9 @@ export default function ManagerConsole() {
           </button>
         ))}
       </div>
-      {tab === 'queue' ? <OrderQueue /> : <Takings />}
+      {tab === 'queue' && <OrderQueue />}
+      {tab === 'takings' && <Takings />}
+      {tab === 'settings' && staff?.role === 'sysadmin' && <SiteSettings />}
     </div>
   )
 }

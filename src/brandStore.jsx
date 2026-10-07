@@ -1,22 +1,13 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from './supabaseClient.js'
 import { DEFAULT_BRAND, deriveBrand } from './brand.js'
+import { staffPost } from './staffSession.jsx'
 
 const CACHE_KEY = 'calista_brand_cache_v1'
-const ADMIN_PW_KEY = 'calista_admin_pw'
 const BrandCtx = createContext(null)
 
-async function apiSave(data) {
-  const pw = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(ADMIN_PW_KEY)) || ''
-  const res = await fetch('/api/settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-admin-password': pw },
-    body: JSON.stringify({ action: 'saveBrand', data })
-  })
-  const d = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(d.error || `Request failed (${res.status})`)
-  return d
-}
+// Business details are sysadmin-only, so the save rides on the staff key.
+const apiSave = (data) => staffPost('/api/settings', { action: 'saveBrand', data })
 
 export function BrandProvider({ children }) {
   const [raw, setRaw] = useState(() => {
