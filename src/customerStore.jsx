@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 
 const SESSION_KEY = 'calista_active_customer'
 const ADMIN_PW_KEY = 'calista_admin_pw'
@@ -71,6 +71,19 @@ export function CustomerProvider({ children }) {
     const { customer } = await api('lookup', { phone: p })
     return customer || null
   }
+
+  // Re-read the signed-in customer once per page load. Orders are priced on
+  // the server from the DB's visit count, so a stale session copy (an order
+  // placed on another device, or a failed recordOrder) would make every
+  // checkout total disagree — and "refresh the page" must actually fix it.
+  useEffect(() => {
+    if (!active?.phone) return
+    lookup(active.phone)
+      .then((fresh) => {
+        if (fresh) persistActive(fresh)
+      })
+      .catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const create = async (phone, name) => {
     const p = normalizePhone(phone)
