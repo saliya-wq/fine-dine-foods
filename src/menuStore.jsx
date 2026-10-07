@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { menu as defaultMenu } from './menu.js'
 import { supabase } from './supabaseClient.js'
+import { staffPost } from './staffSession.jsx'
 
 // Cache of the last menu fetched from Supabase, so the PWA still renders offline.
 const STORAGE_KEY = 'calista_menu_cache_v1'
@@ -128,8 +129,9 @@ export function MenuProvider({ children }) {
     await refresh()
   }
 
+  // Sysadmin-only, so it rides on the staff key rather than the admin password.
   const resetToDefault = async () => {
-    await apiWrite('resetMenu')
+    await staffPost('/api/menu', { action: 'resetMenu' })
     await refresh()
   }
 

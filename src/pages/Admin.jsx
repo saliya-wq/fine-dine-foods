@@ -106,19 +106,9 @@ function Login({ onAuth }) {
 
 function Panel({ onLogout }) {
   const { clearAll: clearImages, overrides } = useImages()
-  const { resetToDefault } = useMenu()
 
   const customImageCount = Object.keys(overrides).length
 
-  const handleResetMenu = async () => {
-    if (confirm('Reset the whole menu to the default categories and items? This replaces the current menu for everyone.')) {
-      try {
-        await resetToDefault()
-      } catch (e) {
-        alert(e.message || 'Could not reset the menu.')
-      }
-    }
-  }
   const handleClearImages = async () => {
     if (confirm('Remove the uploaded brand logo and hero image?')) {
       try {
@@ -140,12 +130,6 @@ function Panel({ onLogout }) {
           >
             Table QR codes →
           </Link>
-          <button
-            onClick={handleResetMenu}
-            className="text-sm px-4 py-2 border border-calista-ink/20 rounded-full hover:border-calista-gold"
-          >
-            Reset menu to default
-          </button>
           {customImageCount > 0 && (
             <button
               onClick={handleClearImages}

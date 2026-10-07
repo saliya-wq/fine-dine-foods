@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { menu as defaultMenu } from '../src/menu.js'
+import { authorize } from '../lib/staff.js'
 
 const URL = process.env.SUPABASE_URL
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -50,16 +51,23 @@ export default async function handler(req, res) {
   if (!URL || !SERVICE_KEY) {
     return res.status(500).json({ error: 'Server not configured (Supabase env vars missing).' })
   }
-  const expected = process.env.ADMIN_PASSWORD
-  if (!expected || req.headers['x-admin-password'] !== expected) {
-    return res.status(401).json({ error: 'Unauthorized. Sign in again.' })
-  }
-
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}
   const { action } = body
   const supabase = admin()
 
+  // Wiping the whole menu is sysadmin-only (staff key); everyday menu
+  // edits stay on the admin password.
+  if (action !== 'resetMenu') {
+    const expected = process.env.ADMIN_PASSWORD
+    if (!expected || req.headers['x-admin-password'] !== expected) {
+      return res.status(401).json({ error: 'Unauthorized. Sign in again.' })
+    }
+  }
+
   try {
+    if (action === 'resetMenu' && !(await authorize(supabase, req, 'sysadmin'))) {
+      return res.status(401).json({ error: 'Only a system administrator can reset the menu.' })
+    }
     switch (action) {
       case 'addCategory': {
         const name = (body.name || '').trim()

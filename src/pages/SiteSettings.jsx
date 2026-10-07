@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSettings, DEFAULT_TIERS } from '../settingsStore.jsx'
 import { BRAND_FIELDS } from '../brand.js'
 import { useBrandStore } from '../brandStore.jsx'
+import { useMenu } from '../menuStore.jsx'
 
 // Sysadmin-only: rendered as a tab in the staff console, and the save is
 // re-checked server-side in api/settings.js.
@@ -12,6 +13,7 @@ export default function SiteSettings() {
       <BrandEditor />
       <ServiceChargeEditor />
       <LoyaltyTiersEditor />
+      <ResetMenu />
     </section>
   )
 }
@@ -236,5 +238,43 @@ function LoyaltyTiersEditor() {
       </div>
       {err && <p className="text-sm text-red-600 mt-3">{err}</p>}
     </form>
+  )
+}
+
+function ResetMenu() {
+  const { resetToDefault } = useMenu()
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState(null)
+
+  const onReset = async () => {
+    if (!confirm('Reset the whole menu to the default categories and items? This replaces the current menu, prices and photos for everyone.')) return
+    setBusy(true); setErr(null); setDone(false)
+    try {
+      await resetToDefault()
+      setDone(true)
+    } catch (e) {
+      setErr(e.message || 'Could not reset the menu.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="bg-white border border-red-200 rounded-lg p-4 mt-4">
+      <span className="text-sm font-medium block">Reset menu to default</span>
+      <span className="text-xs text-calista-ink/50 block mb-3">
+        Replaces every category and item with the starter menu. Edits made in Admin are lost.
+      </span>
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={busy}
+        className="px-5 py-2 border border-red-300 text-red-700 rounded-full text-sm font-semibold hover:bg-red-50 transition disabled:opacity-50"
+      >
+        {busy ? 'Resetting…' : done ? 'Menu reset ✓' : 'Reset menu to default'}
+      </button>
+      {err && <p className="text-sm text-red-600 mt-3">{err}</p>}
+    </div>
   )
 }
