@@ -14,7 +14,7 @@ const SESSION_KEY = 'calista_admin_authed'
 const ADMIN_PW_KEY = 'calista_admin_pw'
 
 // Set to true to show the Settings section (Business details, Service charge, Loyalty tiers).
-const SHOW_SETTINGS = false
+const SHOW_SETTINGS = true
 
 // Admin-gated POST. Every admin API takes the password as a header.
 async function adminPost(url, payload) {
