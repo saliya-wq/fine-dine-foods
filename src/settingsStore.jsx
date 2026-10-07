@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { supabase } from './supabaseClient.js'
+import { staffPost } from './staffSession.jsx'
 
-const STORAGE_KEY = 'calista_settings_v1'
-
-const DEFAULT_TIERS = [
+export const DEFAULT_TIERS = [
   { name: 'New', minVisits: 0, discountPercent: 0 },
   { name: 'Returning', minVisits: 1, discountPercent: 5 },
   { name: 'Regular', minVisits: 5, discountPercent: 10 },
@@ -14,34 +14,66 @@ const DEFAULTS = {
   loyaltyTiers: DEFAULT_TIERS
 }
 
+// Cache of the last DB read, so prices render right on a cold or offline
+// start. A new key on purpose: the old calista_settings_v1 held device-local
+// edits that never reached anyone else, and must not override the DB value.
+const CACHE_KEY = 'calista_settings_cache_v2'
+
+// Tolerates a missing or partial row; the server validates on save.
+const clean = (d) => ({
+  serviceChargePercent: Number.isFinite(Number(d?.serviceChargePercent))
+    ? Number(d.serviceChargePercent)
+    : DEFAULTS.serviceChargePercent,
+  loyaltyTiers: Array.isArray(d?.loyaltyTiers) && d.loyaltyTiers.length ? d.loyaltyTiers : DEFAULT_TIERS
+})
+
 const SettingsCtx = createContext(null)
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) return { ...DEFAULTS, ...JSON.parse(raw) }
+      const raw = localStorage.getItem(CACHE_KEY)
+      if (raw) return clean(JSON.parse(raw))
     } catch {}
     return DEFAULTS
   })
 
-  useEffect(() => {
+  const remember = (next) => {
+    setSettings(next)
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-    } catch (e) {
-      console.warn('Settings: localStorage save failed', e)
+      localStorage.setItem(CACHE_KEY, JSON.stringify(next))
+    } catch {}
+  }
+
+  useEffect(() => {
+    let alive = true
+    async function load() {
+      if (!supabase) return
+      const { data, error } = await supabase
+        .from('site_settings')
+        .select('data')
+        .eq('id', 'ordering')
+        .maybeSingle()
+      if (!alive || error) return
+      // No row yet means nobody has saved: the defaults are the live values.
+      remember(data ? clean(data.data) : DEFAULTS)
     }
-  }, [settings])
+    load()
+    return () => {
+      alive = false
+    }
+  }, [])
 
-  const update = (patch) => setSettings((s) => ({ ...s, ...patch }))
-  const reset = () => setSettings(DEFAULTS)
-  const resetTiers = () => setSettings((s) => ({ ...s, loyaltyTiers: DEFAULT_TIERS }))
+  // Sysadmin-only; the API re-validates and returns what it stored.
+  const save = async (patch) => {
+    const res = await staffPost('/api/settings', {
+      action: 'saveOrdering',
+      data: { ...settings, ...patch }
+    })
+    remember(clean(res.data))
+  }
 
-  return (
-    <SettingsCtx.Provider value={{ ...settings, update, reset, resetTiers }}>
-      {children}
-    </SettingsCtx.Provider>
-  )
+  return <SettingsCtx.Provider value={{ ...settings, save }}>{children}</SettingsCtx.Provider>
 }
 
 export const useSettings = () => useContext(SettingsCtx)

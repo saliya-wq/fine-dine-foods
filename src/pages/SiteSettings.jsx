@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSettings } from '../settingsStore.jsx'
+import { useSettings, DEFAULT_TIERS } from '../settingsStore.jsx'
 import { BRAND_FIELDS } from '../brand.js'
 import { useBrandStore } from '../brandStore.jsx'
 
@@ -79,17 +79,29 @@ function BrandEditor() {
 }
 
 function ServiceChargeEditor() {
-  const { serviceChargePercent, update } = useSettings()
+  const { serviceChargePercent, save } = useSettings()
   const [value, setValue] = useState(String(serviceChargePercent))
   const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
 
-  const onSave = (e) => {
+  // The stored value arrives from the DB after first render.
+  useEffect(() => { setValue(String(serviceChargePercent)) }, [serviceChargePercent])
+
+  const onSave = async (e) => {
     e.preventDefault()
     const n = Math.max(0, Math.min(100, Number(value) || 0))
-    update({ serviceChargePercent: n })
-    setValue(String(n))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+    setBusy(true); setErr(null)
+    try {
+      await save({ serviceChargePercent: n })
+      setValue(String(n))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    } catch (e2) {
+      setErr(e2.message || 'Could not save.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -116,55 +128,60 @@ function ServiceChargeEditor() {
       </label>
       <button
         type="submit"
-        className="px-5 py-3 bg-calista-ink text-calista-cream rounded-lg font-semibold hover:bg-calista-gold hover:text-calista-ink transition"
+        disabled={busy}
+        className="px-5 py-3 bg-calista-ink text-calista-cream rounded-lg font-semibold hover:bg-calista-gold hover:text-calista-ink transition disabled:opacity-50"
       >
-        {saved ? "Saved ✓" : "Save"}
+        {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
       </button>
+      {err && <p className="text-sm text-red-600 sm:col-span-2">{err}</p>}
     </form>
   )
 }
 
 function LoyaltyTiersEditor() {
-  const { loyaltyTiers, update, resetTiers } = useSettings()
+  const { loyaltyTiers, save } = useSettings()
   const [tiers, setTiers] = useState(loyaltyTiers)
   const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => { setTiers(loyaltyTiers) }, [loyaltyTiers])
 
   const onChange = (idx, field, val) => {
     setTiers((prev) => prev.map((t, i) => (i === idx ? { ...t, [field]: val } : t)))
     setSaved(false)
   }
 
-  const onSave = (e) => {
-    e.preventDefault()
-    const cleaned = tiers.map((t) => ({
-      name: t.name.trim() || 'Tier',
-      minVisits: Math.max(0, Number(t.minVisits) || 0),
-      discountPercent: Math.max(0, Math.min(100, Number(t.discountPercent) || 0))
-    })).sort((a, b) => a.minVisits - b.minVisits)
-    update({ loyaltyTiers: cleaned })
-    setTiers(cleaned)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+  const store = async (next) => {
+    setBusy(true); setErr(null)
+    try {
+      await save({ loyaltyTiers: next })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1500)
+    } catch (e2) {
+      setErr(e2.message || 'Could not save.')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const onReset = () => {
-    resetTiers()
-    setTiers([
-      { name: 'New', minVisits: 0, discountPercent: 0 },
-      { name: 'Returning', minVisits: 1, discountPercent: 5 },
-      { name: 'Regular', minVisits: 5, discountPercent: 10 },
-      { name: 'VIP', minVisits: 15, discountPercent: 15 }
-    ])
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
+  const onSave = (e) => {
+    e.preventDefault()
+    store(tiers.map((t) => ({
+      name: String(t.name).trim() || 'Tier',
+      minVisits: Math.max(0, Math.floor(Number(t.minVisits) || 0)),
+      discountPercent: Math.max(0, Math.min(100, Number(t.discountPercent) || 0))
+    })).sort((a, b) => a.minVisits - b.minVisits))
   }
+
+  const onReset = () => store(DEFAULT_TIERS)
 
   return (
     <form onSubmit={onSave} className="bg-white border border-calista-ink/10 rounded-lg p-4">
       <div className="mb-3">
         <span className="text-sm font-medium block">Loyalty tiers</span>
         <span className="text-xs text-calista-ink/50">
-          Discount applied to table orders based on how many times the customer has visited before.
+          Discount for returning customers, based on how many orders they have placed before.
         </span>
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem] sm:grid-cols-[1fr_140px_140px] gap-2 mb-3 text-xs text-calista-ink/60 font-medium uppercase tracking-wider">
@@ -203,18 +220,21 @@ function LoyaltyTiersEditor() {
       <div className="flex gap-2 mt-4">
         <button
           type="submit"
-          className="px-5 py-2 bg-calista-ink text-calista-cream rounded-full text-sm font-semibold hover:bg-calista-gold hover:text-calista-ink transition"
+          disabled={busy}
+          className="px-5 py-2 bg-calista-ink text-calista-cream rounded-full text-sm font-semibold hover:bg-calista-gold hover:text-calista-ink transition disabled:opacity-50"
         >
-          {saved ? 'Saved ✓' : 'Save tiers'}
+          {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save tiers'}
         </button>
         <button
           type="button"
+          disabled={busy}
           onClick={onReset}
           className="px-5 py-2 border border-calista-ink/20 rounded-full text-sm hover:border-calista-gold"
         >
           Reset to defaults
         </button>
       </div>
+      {err && <p className="text-sm text-red-600 mt-3">{err}</p>}
     </form>
   )
 }
