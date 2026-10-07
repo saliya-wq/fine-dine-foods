@@ -1,0 +1,643 @@
+<title>Calista Test Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Playfair+Display:wght@600&display=swap">
+<style>
+/* Layout: a field checklist. One scannable list grouped by area, a sticky
+   progress strip on top, each test a row that opens to its steps. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #141b2d;
+  --muted: #586174;
+  --line: #dde1e8;
+  --accent: #9c7628;
+  --accent-soft: #f3ecdc;
+  --pass: #1d7348;
+  --pass-soft: #e3f3ea;
+  --fail: #b42318;
+  --fail-soft: #fbe7e5;
+  --block: #a2510b;
+  --block-soft: #fbeedd;
+  --todo: #7b8496;
+  --todo-soft: #eceef2;
+
+  --display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1420; --surface: #171e2c; --ink: #e7eaf0; --muted: #9ba4b6; --line: #29324a;
+    --accent: #d6b46c; --accent-soft: #2c2719;
+    --pass: #5ccb94; --pass-soft: #15291f; --fail: #f2766b; --fail-soft: #331a19;
+    --block: #f1a656; --block-soft: #33240f; --todo: #7d879b; --todo-soft: #222a3a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1420; --surface: #171e2c; --ink: #e7eaf0; --muted: #9ba4b6; --line: #29324a;
+  --accent: #d6b46c; --accent-soft: #2c2719;
+  --pass: #5ccb94; --pass-soft: #15291f; --fail: #f2766b; --fail-soft: #331a19;
+  --block: #f1a656; --block-soft: #33240f; --todo: #7d879b; --todo-soft: #222a3a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.55 var(--body);
+  padding-inline: 16px;
+}
+.wrap { max-width: 920px; margin: 0 auto; padding-block: 28px 64px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--todo-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+button, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Header */
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+header h1 { font: 600 clamp(30px, 6vw, 42px)/1.1 var(--display); margin-top: 6px; }
+.lede { color: var(--muted); max-width: 64ch; margin: 10px 0 0; }
+
+/* Sticky progress strip */
+.strip {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); padding-block: 14px 12px; margin-top: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.counts { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.count { display: flex; align-items: baseline; gap: 6px; font-size: 13px; color: var(--muted); }
+.count b { font-size: 20px; font-weight: 600; color: var(--ink); }
+.count[data-s="pass"] b { color: var(--pass); }
+.count[data-s="fail"] b { color: var(--fail); }
+.count[data-s="blocked"] b { color: var(--block); }
+.sync { margin-left: auto; font-size: 12px; color: var(--muted); }
+.bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--todo-soft); margin-top: 10px; }
+.bar span { display: block; height: 100%; transition: width .3s ease; }
+.bar .b-pass { background: var(--pass); }
+.bar .b-fail { background: var(--fail); }
+.bar .b-blocked { background: var(--block); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+  padding: 4px 11px; font-size: 13px; cursor: pointer; color: var(--muted);
+}
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); font-weight: 500; }
+.filters .sep { width: 1px; background: var(--line); margin-inline: 4px; }
+
+/* Setup */
+.setup { margin-top: 28px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.setup section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+.setup h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.setup ul, .setup ol { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; display: grid; gap: 4px; }
+.setup li b { color: var(--ink); font-weight: 500; }
+
+/* Areas + tests */
+.area { margin-top: 36px; }
+.area-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.area-head h2 { font: 600 22px/1.2 var(--display); }
+.area-head .mono { color: var(--accent); font-size: 13px; }
+.area-head .area-count { margin-left: auto; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.area-note { color: var(--muted); font-size: 14px; margin: 8px 0 0; max-width: 70ch; }
+
+details.test { border-bottom: 1px solid var(--line); }
+details.test > summary {
+  list-style: none; cursor: pointer; display: grid; gap: 4px 12px; align-items: start;
+  grid-template-columns: 4.6rem minmax(0, 1fr) auto; padding: 12px 4px;
+}
+details.test > summary::-webkit-details-marker { display: none; }
+details.test > summary:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.tid { font: 500 13px/1.6 var(--mono); color: var(--muted); }
+.ttitle { font-weight: 500; min-width: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.tag { font-size: 11.5px; padding: 1px 7px; border-radius: 4px; background: var(--todo-soft); color: var(--muted); white-space: nowrap; }
+.tag.p1 { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pill {
+  font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  background: var(--todo-soft); color: var(--todo); justify-self: end;
+}
+.pill[data-s="pass"] { background: var(--pass-soft); color: var(--pass); }
+.pill[data-s="fail"] { background: var(--fail-soft); color: var(--fail); }
+.pill[data-s="blocked"] { background: var(--block-soft); color: var(--block); }
+
+.body { display: grid; gap: 14px; padding: 2px 4px 18px calc(4.6rem + 12px); }
+.body h4 { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.body ol, .body ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; max-width: 70ch; }
+.expect li::marker { color: var(--pass); }
+.record { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; }
+.record textarea {
+  width: 100%; min-height: 64px; resize: vertical; border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; background: var(--bg); font-size: 14px;
+}
+.actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.act { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-weight: 500; font-size: 14px; }
+.act[data-s="pass"] { color: var(--pass); }
+.act[data-s="fail"] { color: var(--fail); }
+.act[data-s="blocked"] { color: var(--block); }
+.act[data-s="todo"] { color: var(--muted); }
+.act[aria-pressed="true"][data-s="pass"] { background: var(--pass-soft); border-color: var(--pass); }
+.act[aria-pressed="true"][data-s="fail"] { background: var(--fail-soft); border-color: var(--fail); }
+.act[aria-pressed="true"][data-s="blocked"] { background: var(--block-soft); border-color: var(--block); }
+.act:disabled { opacity: .45; cursor: not-allowed; }
+.last { font-size: 12.5px; color: var(--muted); }
+.err { font-size: 13px; color: var(--fail); }
+
+.notice { margin-top: 14px; padding: 10px 14px; border-radius: var(--radius); background: var(--block-soft); color: var(--ink); font-size: 14px; }
+.empty-filter { color: var(--muted); padding: 24px 0; }
+footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 560px) {
+  details.test > summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .tid { grid-column: 1 / -1; }
+  .body { padding-left: 4px; }
+  .sync { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">fine-dine-by-kitchen.vercel.app · plan of 7 Oct 2026</div>
+    <h1>Calista Test Plan</h1>
+    <p class="lede">
+      Every flow in the ordering platform, from a customer's first tap to the cash in the takings.
+      Open a test, follow the steps, and mark it <b>Pass</b>, <b>Fail</b> or <b>Blocked</b>.
+      Results are shared, so everyone testing sees the same list.
+    </p>
+  </header>
+
+  <div class="strip" id="strip">
+    <div class="counts" aria-live="polite">
+      <span class="count" data-s="pass"><b id="n-pass">0</b> passed</span>
+      <span class="count" data-s="fail"><b id="n-fail">0</b> failed</span>
+      <span class="count" data-s="blocked"><b id="n-blocked">0</b> blocked</span>
+      <span class="count" data-s="todo"><b id="n-todo">0</b> not run</span>
+      <span class="sync" id="sync">Connecting to shared results…</span>
+    </div>
+    <div class="bar" aria-hidden="true">
+      <span class="b-pass" id="b-pass" style="width:0"></span>
+      <span class="b-fail" id="b-fail" style="width:0"></span>
+      <span class="b-blocked" id="b-blocked" style="width:0"></span>
+    </div>
+  </div>
+  <div class="filters" id="filters" role="toolbar" aria-label="Filter tests"></div>
+
+  <div id="notice" class="notice" hidden></div>
+
+  <div class="setup">
+    <section>
+      <h3>What you need</h3>
+      <ul>
+        <li><b>Site:</b> <code>https://fine-dine-by-kitchen.vercel.app</code></li>
+        <li><b>Staff keys</b> for sysadmin (starts <code>79V</code>), manager (<code>PQU</code>) and two riders (<code>FV2</code>, <code>G7F</code>). Never type a key into this page.</li>
+        <li><b>Admin password</b> for <code>/admin</code>.</li>
+        <li><b>Devices:</b> an Android phone (Chrome), an iPhone (Safari) and a laptop.</li>
+        <li><b>Two mobile numbers</b> you own, for the customer side.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>How to run it</h3>
+      <ol>
+        <li>Run <b>Smoke</b>, then <b>Sysadmin settings</b>, so the business details are filled in first.</li>
+        <li>Pair up for orders: one person orders on a phone, another works <code>/staff</code> on the laptop.</li>
+        <li>Pay <b>cash</b> only. Write <b>TEST</b> in Special instructions on every order.</li>
+        <li>On a fail, note what you saw and the order number (<code>CAL-XXXXXX</code>).</li>
+        <li>Finish with <b>Clean up</b>.</li>
+      </ol>
+    </section>
+    <section>
+      <h3>Reference values</h3>
+      <ul>
+        <li><b>Delivery fee:</b> up to 3 km Rs 300 · 6 km Rs 500 · 8 km Rs 800 · beyond 8 km Rs 800 with a warning · no pin Rs 500</li>
+        <li><b>Default loyalty:</b> New 0 visits 0% · Returning 1+ 5% · Regular 5+ 10% · VIP 15+ 15%</li>
+        <li><b>Default service charge:</b> 15%, dine-in only</li>
+        <li><b>Priority:</b> P1 blocks launch · P2 fix soon · P3 nice to have</li>
+      </ul>
+    </section>
+  </div>
+
+  <main id="areas"></main>
+  <p class="empty-filter" id="empty" hidden>No tests match these filters.</p>
+
+  <section class="area" id="cleanup">
+    <div class="area-head"><h2>Clean up</h2><span class="mono">after testing</span></div>
+    <div class="setup" style="margin-top:12px">
+      <section>
+        <ol>
+          <li>Cancel every open TEST order in the manager Queue.</li>
+          <li>Remove test customers in <code>/admin</code> → Customers.</li>
+          <li>Put back any service charge, loyalty tier or menu price you changed.</li>
+          <li>Send the developer the order numbers of anything that failed.</li>
+        </ol>
+      </section>
+    </div>
+  </section>
+
+  <footer>Results save as you go. Opening a test link like <code>#CU-04</code> jumps straight to that test.</footer>
+</div>
+
+<script>
+const AREAS = [
+  { key: 'SM', name: 'Smoke', note: 'Five minutes. If any of these fail, stop and report before going further.' },
+  { key: 'SA', name: 'Sysadmin settings', note: 'Sign in at /staff with the sysadmin key. Settings only exists for this role.' },
+  { key: 'CU', name: 'Customer ordering', note: 'Use a private/incognito window on a phone so each run starts as a fresh customer.' },
+  { key: 'TR', name: 'Tracking and notifications', note: 'Needs someone in the manager console moving the order along.' },
+  { key: 'MG', name: 'Manager console', note: 'Laptop at /staff with the manager key. Tap the page once first so the new-order sound can play.' },
+  { key: 'RD', name: 'Rider portal', note: 'A phone at /staff with a rider key. Use a delivery order assigned to that rider.' },
+  { key: 'AD', name: 'Admin panel', note: '/admin with the admin password.' },
+  { key: 'PB', name: 'Phones and browsers', note: '' },
+  { key: 'RS', name: 'Reliability', note: 'Developer checks on Vercel and Supabase.' }
+]
+
+const TESTS = [
+  // Smoke
+  { id: 'SM-01', area: 'SM', pri: 1, who: ['Anyone'], title: 'Site opens on a phone',
+    steps: ['Open https://fine-dine-by-kitchen.vercel.app on a phone.', 'Also open https://fine-dine-foods.vercel.app.'],
+    expect: ['Both show the home page with Menu, Promotions and Cart in the header.', 'Nothing spills off the right edge of the screen.'] },
+  { id: 'SM-02', area: 'SM', pri: 1, who: ['Anyone'], title: 'Menu shows items, prices and photos',
+    steps: ['Open Menu.', 'Scroll through every category.'],
+    expect: ['Every item has a name and a price in Rs.', 'Photos load (no broken image icons).'] },
+  { id: 'SM-03', area: 'SM', pri: 1, who: ['Anyone'], title: 'Staff sign-in rejects a made-up key',
+    steps: ['Open /staff.', 'Enter AAA-AAAA-AAAA and sign in.'],
+    expect: ['"That key was not recognised." appears.', 'You stay on the sign-in screen.'] },
+
+  // Sysadmin
+  { id: 'SA-01', area: 'SA', pri: 1, who: ['Sysadmin', 'Manager'], title: 'Only the sysadmin sees Settings',
+    steps: ['Sign in at /staff with the sysadmin key.', 'Sign out, then sign in with the manager key.'],
+    expect: ['Sysadmin sees three tabs: Queue, Takings, Settings.', 'Manager sees only Queue and Takings.'] },
+  { id: 'SA-02', area: 'SA', pri: 1, who: ['Sysadmin'], title: 'Business details appear across the site',
+    steps: ['Settings → fill in name, tagline, address, phone, WhatsApp, hours.', 'Save business details.', 'On a different phone, open the home page and scroll to the footer.'],
+    expect: ['"Saved ✓" shows.', 'The name shows in the header, the logo letter, the home greeting and the footer.', 'WhatsApp and phone links use the numbers you entered; hours are listed.'] },
+  { id: 'SA-03', area: 'SA', pri: 1, who: ['Sysadmin', 'Customer'], title: 'Service charge change reaches customers',
+    steps: ['Settings → set service charge to 10 and Save.', 'On another phone open /menu?table=5, add an item, open the cart.', 'Afterwards set it back to the real value.'],
+    expect: ['Cart shows "Service charge (10%)".', 'Pick-up and delivery carts show no service charge.'] },
+  { id: 'SA-04', area: 'SA', pri: 2, who: ['Sysadmin', 'Customer'], title: 'Loyalty tier change reaches checkout',
+    steps: ['Settings → change Returning discount to 7, Save tiers.', 'As a customer with at least one past order, add items and open checkout.', 'Restore the tier afterwards.'],
+    expect: ['Checkout shows a 7% discount line.'] },
+  { id: 'SA-05', area: 'SA', pri: 2, who: ['Sysadmin'], title: 'Bad settings are refused',
+    steps: ['Set service charge to 150 and Save.', 'Set the first tier\'s min visits to 2 and Save tiers.'],
+    expect: ['"Service charge must be between 0 and 100%."', '"The first tier must start at 0 visits."', 'Neither value is saved.'] },
+  { id: 'SA-06', area: 'SA', pri: 2, who: ['Admin'], title: 'Admin password cannot change settings',
+    steps: ['Sign in at /admin with the admin password.', 'Scroll the whole page.'],
+    expect: ['There is no Settings or Business details section.'] },
+
+  // Customer
+  { id: 'CU-01', area: 'CU', pri: 1, who: ['Customer'], device: 'Phone', title: 'New customer gets through the phone gate',
+    steps: ['In a private window open /menu.', 'Enter a mobile number never used before, then your name.'],
+    expect: ['A welcome message, then the menu.', 'The customer appears in /admin → Customers with 0 visits.'] },
+  { id: 'CU-02', area: 'CU', pri: 2, who: ['Customer'], device: 'Phone', title: 'Returning customer is recognised',
+    steps: ['After CU-04, open a new private window and enter the same number.'],
+    expect: ['Greeted by name, with the loyalty tier shown.'] },
+  { id: 'CU-03', area: 'CU', pri: 1, who: ['Customer'], device: 'Phone', title: 'Cart adds, changes and removes items',
+    steps: ['Add two different items.', 'Open Cart, raise one quantity to 3, remove the other.'],
+    expect: ['The header Cart badge counts units.', 'Subtotal and total update after every change.'] },
+  { id: 'CU-04', area: 'CU', pri: 1, who: ['Customer', 'Manager'], device: 'Phone', title: 'Pick-up order with cash',
+    steps: ['Add items, open Checkout, choose Pickup.', 'Set a pickup time, write TEST in Special instructions.', 'Place order.'],
+    expect: ['Thank-you screen with an order number CAL-XXXXXX and a Track button.', 'The total matches what checkout showed.', 'The order reaches the manager queue (MG-01).'] },
+  { id: 'CU-05', area: 'CU', pri: 1, who: ['Customer'], device: 'Phone', title: 'Delivery fee from "Share my location"',
+    steps: ['Checkout → Delivery.', 'Tap Share my location and allow it.'],
+    expect: ['The pin is set and "View pin" opens Google Maps at your spot.', 'Distance shows, and the fee matches the reference table.'] },
+  { id: 'CU-06', area: 'CU', pri: 2, who: ['Customer'], device: 'Phone', title: 'Delivery pin from a pasted Maps link',
+    steps: ['Paste a Google Maps link that contains coordinates.', 'Then paste a link without coordinates (a short maps.app.goo.gl link).'],
+    expect: ['With coordinates: distance and fee show.', 'Without: you are asked to pin the location.'] },
+  { id: 'CU-07', area: 'CU', pri: 2, who: ['Customer'], device: 'Phone', title: 'Out-of-zone pin warns but allows',
+    steps: ['Paste a Maps link more than 8 km from the restaurant.'],
+    expect: ['A warning that it is outside the delivery range.', 'Fee is Rs 800 and the order can still be placed.'] },
+  { id: 'CU-08', area: 'CU', pri: 1, who: ['Customer'], device: 'Phone', title: 'Delivery without a pin is stopped',
+    steps: ['Checkout → Delivery, fill the address but no pin.', 'Place order.'],
+    expect: ['"Please pin your delivery location so we can route the driver."', 'No order is created.'] },
+  { id: 'CU-09', area: 'CU', pri: 1, who: ['Customer', 'Manager'], device: 'Phone', title: 'Delivery order with cash',
+    steps: ['Place a delivery order with a pin and TEST in instructions.'],
+    expect: ['Order number shown; total = items + delivery fee.', 'Manager sees the address and an "Open in Google Maps" link.'] },
+  { id: 'CU-10', area: 'CU', pri: 2, who: ['Customer'], device: 'Phone', title: 'Address and pin fill in next time',
+    steps: ['After CU-09, start another delivery order with the same number.'],
+    expect: ['Address and pin are already filled in.'] },
+  { id: 'CU-11', area: 'CU', pri: 1, who: ['Customer', 'Manager'], device: 'Phone', title: 'Dine-in order from a table QR',
+    steps: ['Scan a QR from /admin/qr, or open /menu?table=5.', 'Add items and place the order.'],
+    expect: ['A banner says "Ordering for Table 5".', 'No pickup/delivery choice; the service charge line appears.', 'Payment is at the restaurant; the manager sees Table 5.'] },
+  { id: 'CU-12', area: 'CU', pri: 1, who: ['Customer'], device: 'Phone', title: 'Loyalty discount after the first order',
+    steps: ['With the number from CU-04, start a second order.'],
+    expect: ['Cart and checkout show a 5% discount (Returning).', '/admin → Customers shows visits went up by exactly 1 per order.'] },
+  { id: 'CU-13', area: 'CU', pri: 1, who: ['Customer', 'Admin'], device: 'Phone', title: 'Price change while a cart is open',
+    steps: ['Customer: add an item and open checkout, don\'t place yet.', 'Admin: change that item\'s price in /admin → Menu.', 'Customer: Place order.', 'Customer: refresh, check the new price, place again.'],
+    expect: ['First attempt: "Prices have changed since you opened the menu. Please refresh the page and check your order."', 'After refresh the new price shows and the order goes through.'] },
+  { id: 'CU-14', area: 'CU', pri: 3, who: ['Customer', 'Admin'], device: 'Phone', title: 'Item deleted while in a cart',
+    steps: ['Customer: add an item.', 'Admin: delete that item.', 'Customer: place the order.'],
+    expect: ['"An item in your cart is no longer on the menu."'] },
+  { id: 'CU-15', area: 'CU', pri: 2, who: ['Customer'], device: 'Phone', title: 'Only cash is offered',
+    steps: ['Open checkout for pick-up and for delivery.'],
+    expect: ['No online payment option (PayHere is switched off for now).'] },
+
+  // Tracking + notifications
+  { id: 'TR-01', area: 'TR', pri: 1, who: ['Customer', 'Manager'], device: 'Phone', title: 'Pick-up tracking follows the order',
+    steps: ['Open Track after CU-04 and leave it open.', 'Manager moves the order through each stage.'],
+    expect: ['Within about 15 seconds of each change the page updates.', 'Steps: Order Placed → Order Received → Processing → Ready for Collection.'] },
+  { id: 'TR-02', area: 'TR', pri: 1, who: ['Customer', 'Manager', 'Rider'], device: 'Phone', title: 'Delivery tracking to Delivered',
+    steps: ['Track the CU-09 order while manager and rider move it along.'],
+    expect: ['Steps go on to Ready for Delivery → Out for Delivery → Delivered.'] },
+  { id: 'TR-03', area: 'TR', pri: 2, who: ['Anyone'], title: 'Track page hides private details',
+    steps: ['Open a track link on a device that did not place the order.'],
+    expect: ['No phone number and no rider details are shown.'] },
+  { id: 'TR-04', area: 'TR', pri: 2, who: ['Customer'], device: 'Android', title: 'Status notifications on Android',
+    steps: ['On the Track page tap the notifications button and allow.', 'Lock the phone; manager advances the order.'],
+    expect: ['A notification arrives for each status change.', 'Tapping it opens the Track page.'] },
+  { id: 'TR-05', area: 'TR', pri: 2, who: ['Customer'], device: 'iPhone', title: 'Status notifications on iPhone',
+    steps: ['Safari → Share → Add to Home Screen.', 'Open the app from the icon, place an order, enable notifications on Track.', 'Manager advances the order.'],
+    expect: ['A notification arrives on the iPhone.'] },
+  { id: 'TR-06', area: 'TR', pri: 3, who: ['Admin'], title: 'Promo broadcast',
+    steps: ['Only with the owner\'s OK: this goes to every subscribed customer.', '/admin → Notifications → write a short message → confirm.'],
+    expect: ['Subscribed test phones receive it.', 'The subscriber count looks right.'] },
+
+  // Manager
+  { id: 'MG-01', area: 'MG', pri: 1, who: ['Manager'], device: 'Laptop', title: 'New order arrives with a sound',
+    steps: ['Keep the Queue open.', 'A customer places an order.'],
+    expect: ['Within about 15 seconds it appears under "Needs authorising" with a ping.'] },
+  { id: 'MG-02', area: 'MG', pri: 1, who: ['Manager'], device: 'Laptop', title: 'Authorise sends it to the kitchen',
+    steps: ['Tap "Authorise → send to kitchen".'],
+    expect: ['The order moves to "In the kitchen".', 'The customer\'s Track shows Order Received.'] },
+  { id: 'MG-03', area: 'MG', pri: 1, who: ['Manager'], device: 'Laptop', title: 'Kitchen stages through to Ready',
+    steps: ['Advance the order to Processing, then Ready.'],
+    expect: ['It moves to the Ready column; Track follows each step.'] },
+  { id: 'MG-04', area: 'MG', pri: 1, who: ['Manager'], device: 'Laptop', title: 'No dispatch without a rider',
+    steps: ['On a ready delivery order with no rider, try Out for delivery.'],
+    expect: ['It is blocked until a rider is assigned.'] },
+  { id: 'MG-05', area: 'MG', pri: 1, who: ['Manager'], device: 'Laptop', title: 'Assign, unassign and reassign a rider',
+    steps: ['Assign Rider 1, unassign, then assign Rider 1 again.'],
+    expect: ['The rider\'s portal shows or drops the run each time.', 'History lists each change.'] },
+  { id: 'MG-06', area: 'MG', pri: 1, who: ['Manager'], device: 'Laptop', title: 'Cancel an order',
+    steps: ['Cancel a TEST order.'],
+    expect: ['It greys out and leaves the active queue.', 'Track shows it as cancelled.', 'It is not counted in Takings.'] },
+  { id: 'MG-07', area: 'MG', pri: 1, who: ['Manager'], device: 'Laptop', title: 'Settle cash, then undo',
+    steps: ['On a ready pick-up order, mark it paid.', 'Then tap Undo payment.'],
+    expect: ['Marked paid, then back to owed.', 'Takings changes accordingly each time.'] },
+  { id: 'MG-08', area: 'MG', pri: 2, who: ['Manager'], device: 'Laptop', title: 'History shows who did what',
+    steps: ['Open History on an order that went all the way through.'],
+    expect: ['Each step lists the customer, manager or rider by name, with times.'] },
+  { id: 'MG-09', area: 'MG', pri: 2, who: ['Manager'], device: 'Laptop', title: 'Takings add up',
+    steps: ['After the test orders, open Takings.', 'Add up today\'s paid TEST orders by hand.', 'Switch between 7, 14 and 30 days.'],
+    expect: ['"Collected today" equals your sum.', '"Still owed" equals the unpaid ones; cancelled orders are excluded.', 'Nothing runs off the screen on a phone.'] },
+
+  // Rider
+  { id: 'RD-01', area: 'RD', pri: 1, who: ['Rider'], device: 'Phone', title: 'Riders see only their own runs',
+    steps: ['Assign an order to Rider 1.', 'Sign in as Rider 1 on one phone and Rider 2 on another.'],
+    expect: ['Only Rider 1 sees the order.'] },
+  { id: 'RD-02', area: 'RD', pri: 1, who: ['Rider'], device: 'Phone', title: 'Navigate and Call work',
+    steps: ['Tap Navigate, then Call.'],
+    expect: ['Navigate opens Google Maps at the customer\'s pin.', 'Call opens the dialler with the customer\'s number.'] },
+  { id: 'RD-03', area: 'RD', pri: 1, who: ['Rider', 'Customer'], device: 'Phone', title: 'Picked up marks it out for delivery',
+    steps: ['Tap the picked-up action.'],
+    expect: ['Status becomes Out for Delivery; the customer\'s Track follows.'] },
+  { id: 'RD-04', area: 'RD', pri: 1, who: ['Rider', 'Manager'], device: 'Phone', title: 'Delivered collects cash in one tap',
+    steps: ['Tap Delivered.'],
+    expect: ['The run leaves the rider\'s list; "delivered today" goes up by 1.', 'Manager sees it delivered and paid; Takings includes it.'] },
+  { id: 'RD-05', area: 'RD', pri: 2, who: ['Rider', 'Manager'], device: 'Phone', title: 'Delivered but couldn\'t collect',
+    steps: ['On another run tap "Delivered but couldn\'t collect payment".'],
+    expect: ['Delivered, but still owed in the manager console and Takings.'] },
+
+  // Admin
+  { id: 'AD-01', area: 'AD', pri: 1, who: ['Admin'], device: 'Laptop', title: 'Admin sign-in',
+    steps: ['Open /admin, try a wrong password, then the right one.'],
+    expect: ['Wrong password: "Incorrect password."', 'Right one: the admin panel opens.'] },
+  { id: 'AD-02', area: 'AD', pri: 1, who: ['Admin'], device: 'Laptop', title: 'Menu add, edit, delete',
+    steps: ['Add a TEST item with a photo, change its price, then delete it.', 'Refresh /menu on a phone after each step.'],
+    expect: ['Customers see each change after a refresh.'] },
+  { id: 'AD-03', area: 'AD', pri: 2, who: ['Admin'], device: 'Laptop', title: 'Promotions',
+    steps: ['Add a promotion with dates, edit it, remove it.'],
+    expect: ['/promotions shows it with the right status for its dates, then removes it.'] },
+  { id: 'AD-04', area: 'AD', pri: 3, who: ['Admin'], device: 'Laptop', title: 'Logo and hero image',
+    steps: ['Upload a logo and a hero image.'],
+    expect: ['Both show on the home page and header.'] },
+  { id: 'AD-05', area: 'AD', pri: 2, who: ['Admin'], device: 'Laptop', title: 'Customers list',
+    steps: ['Open Customers; find the test numbers; remove one.'],
+    expect: ['Visits and tier are right; the removed customer is gone.'] },
+  { id: 'AD-06', area: 'AD', pri: 2, who: ['Admin'], device: 'Laptop', title: 'Orders list in admin',
+    steps: ['Open Orders and change a TEST order\'s status.'],
+    expect: ['The change shows in the manager console and on Track.'] },
+  { id: 'AD-07', area: 'AD', pri: 2, who: ['Admin'], device: 'Laptop', title: 'Table QR sheet',
+    steps: ['Open /admin/qr and scan two codes with a phone.'],
+    expect: ['Each opens /menu?table=N for the right table.'] },
+
+  // Phones + browsers
+  { id: 'PB-01', area: 'PB', pri: 2, who: ['Anyone'], device: 'Phone', title: 'Nothing scrolls sideways on a phone',
+    steps: ['On a small phone open Home, Menu, Cart, Checkout, Track, and /staff (Queue, Takings, Settings).'],
+    expect: ['No page scrolls sideways; no text is cut off.'] },
+  { id: 'PB-02', area: 'PB', pri: 2, who: ['Customer'], title: 'Order works on each browser',
+    steps: ['Run CU-04 on iPhone Safari, Android Chrome and a laptop browser.'],
+    expect: ['The order goes through on all three.'] },
+  { id: 'PB-03', area: 'PB', pri: 3, who: ['Customer'], device: 'Phone', title: 'Install as an app',
+    steps: ['Android: menu → Add to Home screen. iPhone: Share → Add to Home Screen.', 'Open from the icon.'],
+    expect: ['Opens full screen without the browser bar.'] },
+
+  // Reliability
+  { id: 'RS-01', area: 'RS', pri: 2, who: ['Developer'], title: 'Daily keep-alive is running',
+    steps: ['Vercel → fine-dine-foods → Logs, filter /api/keep-alive.'],
+    expect: ['A 200 response each day around 03:00 UTC (08:30 Colombo).'] },
+  { id: 'RS-02', area: 'RS', pri: 2, who: ['Developer'], title: 'Database stays awake',
+    steps: ['A week from now, open the Supabase dashboard.'],
+    expect: ['The fine-dine-foods project shows as active, not paused.'] }
+]
+
+const STATUS = { pass: 'Passed', fail: 'Failed', blocked: 'Blocked', todo: 'Not run' }
+const results = {}          // id -> { status, note, by, at }
+let db = null, user = null, canWrite = true
+const filters = { area: 'all', status: 'all', p1: false }
+
+const $ = (s, el = document) => el.querySelector(s)
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n }
+const statusOf = (id) => results[id]?.status || 'todo'
+
+// ── Build the page once; snapshots only update what changed ──────────────
+function buildFilters() {
+  const bar = $('#filters')
+  const add = (label, group, value) => {
+    const b = el('button', 'chip', label)
+    b.type = 'button'
+    b.dataset.group = group; b.dataset.value = value
+    b.addEventListener('click', () => {
+      if (group === 'p1') filters.p1 = !filters.p1
+      else filters[group] = value
+      syncFilterChips(); applyFilters()
+    })
+    bar.append(b)
+  }
+  add('All areas', 'area', 'all')
+  AREAS.forEach((a) => add(a.name, 'area', a.key))
+  bar.append(el('span', 'sep'))
+  add('Any status', 'status', 'all')
+  add('Not run', 'status', 'todo')
+  add('Failed', 'status', 'fail')
+  add('Blocked', 'status', 'blocked')
+  add('Passed', 'status', 'pass')
+  bar.append(el('span', 'sep'))
+  add('P1 only', 'p1', 'on')
+  syncFilterChips()
+}
+function syncFilterChips() {
+  document.querySelectorAll('#filters .chip').forEach((c) => {
+    const g = c.dataset.group
+    const on = g === 'p1' ? filters.p1 : filters[g] === c.dataset.value
+    c.setAttribute('aria-pressed', on ? 'true' : 'false')
+  })
+}
+
+function buildAreas() {
+  const root = $('#areas')
+  for (const a of AREAS) {
+    const sec = el('section', 'area'); sec.id = 'area-' + a.key; sec.dataset.area = a.key
+    const head = el('div', 'area-head')
+    head.append(el('h2', null, a.name), el('span', 'mono', a.key), el('span', 'area-count'))
+    sec.append(head)
+    if (a.note) sec.append(el('p', 'area-note', a.note))
+    for (const t of TESTS.filter((x) => x.area === a.key)) sec.append(buildTest(t))
+    root.append(sec)
+  }
+}
+
+function buildTest(t) {
+  const d = el('details', 'test'); d.id = t.id; d.dataset.id = t.id
+  const s = el('summary')
+  const main = el('div'); main.style.minWidth = '0'
+  main.append(el('div', 'ttitle', t.title))
+  const meta = el('div', 'meta')
+  meta.append(el('span', 'tag' + (t.pri === 1 ? ' p1' : ''), 'P' + t.pri))
+  t.who.forEach((w) => meta.append(el('span', 'tag', w)))
+  if (t.device) meta.append(el('span', 'tag', t.device))
+  main.append(meta)
+  const pill = el('span', 'pill', STATUS.todo); pill.dataset.s = 'todo'
+  s.append(el('span', 'tid', t.id), main, pill)
+  d.append(s)
+
+  const body = el('div', 'body')
+  const st = el('div'); st.append(el('h4', null, 'Steps'))
+  const ol = el('ol'); t.steps.forEach((x) => ol.append(el('li', null, x))); st.append(ol)
+  const ex = el('div'); ex.append(el('h4', null, 'Expected'))
+  const ul = el('ul', 'expect'); t.expect.forEach((x) => ul.append(el('li', null, x))); ex.append(ul)
+
+  const rec = el('div', 'record')
+  const label = el('label', null, 'Notes'); label.htmlFor = 'note-' + t.id
+  label.style.fontSize = '13px'; label.style.color = 'var(--muted)'
+  const ta = el('textarea'); ta.id = 'note-' + t.id
+  ta.placeholder = 'What happened, which device, the order number…'
+  const actions = el('div', 'actions')
+  for (const [s2, text] of [['pass', 'Pass'], ['fail', 'Fail'], ['blocked', 'Blocked'], ['todo', 'Clear']]) {
+    const b = el('button', 'act', text); b.type = 'button'; b.dataset.s = s2
+    b.addEventListener('click', () => record(t.id, s2, ta.value))
+    actions.append(b)
+  }
+  ta.addEventListener('change', () => {
+    // Saving a note alone keeps the current status.
+    if ((results[t.id]?.note || '') !== ta.value) record(t.id, statusOf(t.id), ta.value)
+  })
+  const last = el('div', 'last'); const err = el('div', 'err'); err.hidden = true
+  rec.append(label, ta, actions, last, err)
+  body.append(st, ex, rec)
+  d.append(body)
+  return d
+}
+
+// ── Writes ────────────────────────────────────────────────────────────────
+async function record(id, status, note) {
+  const row = document.getElementById(id)
+  const err = $('.err', row)
+  err.hidden = true
+  if (!db) { showErr(err, 'Results can\'t be saved in this view.'); return }
+  try {
+    const by = user ? await user.id() : null
+    const doc = db.doc('results/' + id)
+    if (status === 'todo' && !note.trim()) await doc.delete()
+    else await doc.set({ status, note: note.slice(0, 2000), by: by || null, at: new Date().toISOString() })
+  } catch (e) {
+    if (e?.code === 'invalid_argument') { setReadOnly('You can view results but not record them. Ask the owner for Contributor access.'); return }
+    showErr(err, e?.code === 'quota_exceeded' ? 'The results store is full.' : 'Couldn\'t save. Check your connection and try again.')
+  }
+}
+function showErr(node, msg) { node.textContent = msg; node.hidden = false }
+
+function setReadOnly(msg) {
+  canWrite = false
+  const n = $('#notice'); n.textContent = msg; n.hidden = false
+  document.querySelectorAll('.act, .record textarea').forEach((x) => { x.disabled = true })
+  $('#sync').textContent = 'View only'
+}
+
+// ── Rendering from results ────────────────────────────────────────────────
+async function renderResults() {
+  const ids = [...new Set(Object.values(results).map((r) => r.by).filter(Boolean))]
+  const people = user && ids.length ? await user.profiles(ids) : {}
+  for (const t of TESTS) {
+    const row = document.getElementById(t.id)
+    const r = results[t.id]
+    const s = statusOf(t.id)
+    const pill = $('.pill', row); pill.dataset.s = s; pill.textContent = STATUS[s]
+    row.dataset.status = s
+    row.querySelectorAll('.act').forEach((b) => b.setAttribute('aria-pressed', b.dataset.s === s && s !== 'todo' ? 'true' : 'false'))
+    const ta = $('textarea', row)
+    if (document.activeElement !== ta) ta.value = r?.note || ''
+    const last = $('.last', row)
+    if (r) {
+      const who = (r.by && people[r.by]?.name) || 'Someone'
+      const when = r.at ? new Date(r.at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+      last.textContent = `${STATUS[s]} by ${who}${when ? ' · ' + when : ''}`
+    } else last.textContent = 'Not run yet.'
+  }
+  renderCounts(); applyFilters()
+}
+
+function renderCounts() {
+  const n = { pass: 0, fail: 0, blocked: 0, todo: 0 }
+  TESTS.forEach((t) => n[statusOf(t.id)]++)
+  for (const k of Object.keys(n)) $('#n-' + k).textContent = n[k]
+  for (const k of ['pass', 'fail', 'blocked']) $('#b-' + k).style.width = (n[k] / TESTS.length * 100) + '%'
+  for (const a of AREAS) {
+    const ts = TESTS.filter((t) => t.area === a.key)
+    const done = ts.filter((t) => statusOf(t.id) !== 'todo').length
+    $('#area-' + a.key + ' .area-count').textContent = `${done} of ${ts.length} run`
+  }
+}
+
+function applyFilters() {
+  let shown = 0
+  for (const t of TESTS) {
+    const ok = (filters.area === 'all' || t.area === filters.area) &&
+      (filters.status === 'all' || statusOf(t.id) === filters.status) &&
+      (!filters.p1 || t.pri === 1)
+    document.getElementById(t.id).hidden = !ok
+    if (ok) shown++
+  }
+  for (const a of AREAS) {
+    const sec = document.getElementById('area-' + a.key)
+    sec.hidden = ![...sec.querySelectorAll('details.test')].some((d) => !d.hidden)
+  }
+  $('#empty').hidden = shown > 0
+}
+
+// ── Start ────────────────────────────────────────────────────────────────
+buildFilters(); buildAreas(); renderCounts(); applyFilters()
+document.querySelectorAll('.last').forEach((n) => { n.textContent = 'Not run yet.' })
+
+function openFromHash() {
+  const id = decodeURIComponent(location.hash.slice(1))
+  const d = id && document.getElementById(id)
+  if (d && d.matches('details.test')) { d.open = true; d.scrollIntoView({ block: 'start' }) }
+}
+openFromHash(); window.addEventListener('hashchange', openFromHash)
+
+;(async () => {
+  if (!window.claude?.use) { $('#sync').textContent = 'Results aren\'t shared in this view'; setReadOnly('Open this page on claude.ai to record results.'); return }
+  ;[db, user] = await Promise.all([claude.use('db'), claude.use('user')])
+  if (!db) { setReadOnly('Results can\'t be loaded in this view. Sign in to claude.ai to see and record them.'); return }
+  const may = user ? await user.can('data.write') : null
+  if (may === false) setReadOnly('You can view results but not record them. Ask the owner for Contributor access.')
+  db.collection('results').onSnapshot((snap) => {
+    for (const k of Object.keys(results)) delete results[k]
+    snap.docs.forEach((d) => { results[d.id] = d.data() })
+    if (canWrite) $('#sync').textContent = snap.metadata.fromCache ? 'Syncing…' : 'Results are shared and save as you go'
+    renderResults()
+  }, () => { $('#sync').textContent = 'Lost connection to shared results. Reload to reconnect.' })
+})()
+</script>
