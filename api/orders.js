@@ -4,6 +4,7 @@ import { sendToCustomer } from '../lib/push.js'
 import { authorize } from '../lib/staff.js'
 import { customerActor, logOrderEvent } from '../lib/audit.js'
 import { payhereConfigured } from '../lib/payhere.js'
+import { priceOrder } from '../lib/pricing.js'
 
 /**
  * Write a new status, record who did it, and notify the customer. Shared by
@@ -71,7 +72,27 @@ const recentColomboDates = (n) => {
   const todayMs = new Date(colomboDate(new Date().toISOString()) + 'T00:00:00Z').getTime()
   return Array.from({ length: n }, (_, i) => new Date(todayMs - (n - 1 - i) * 86400000).toISOString().slice(0, 10))
 }
-const num = (n) => Number(n) || 0
+
+// One more visit and the order's server-priced total for a known customer.
+// Unknown phones are skipped: customers are created at the menu's phone gate.
+async function countVisit(supabase, phone, total) {
+  const { data, error } = await supabase
+    .from('customers')
+    .select('visits, total_spent')
+    .eq('phone', phone)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return
+  const { error: upErr } = await supabase
+    .from('customers')
+    .update({
+      visits: data.visits + 1,
+      total_spent: Number(data.total_spent) + total,
+      last_seen: new Date().toISOString()
+    })
+    .eq('phone', phone)
+  if (upErr) throw upErr
+}
 
 // What the customer sees on the tracking page. Never exposes phone or rider.
 const toPublicOrder = (r) => ({
@@ -144,6 +165,27 @@ export default async function handler(req, res) {
         const wantsOnline = body.paymentType === 'online' && payhereConfigured()
         const paymentType = mode === 'table' ? 'at_restaurant' : wantsOnline ? 'online' : 'cash'
 
+        // Every amount is recomputed from the DB; the client's figures are
+        // only used to catch a stale page, never stored.
+        const location = mode === 'delivery' ? body.location || null : null
+        const priced = await priceOrder(supabase, {
+          mode,
+          items,
+          phone: body.customer?.phone || body.phone,
+          location
+        })
+        if (priced.error) return res.status(priced.status).json({ error: priced.error })
+        const t = priced.totals
+        // The customer agreed to the total they saw. If ours differs (a price
+        // or setting changed since their page loaded), stop rather than
+        // charge or collect an amount they never saw.
+        if (Math.abs(int(body.total) - int(t.total)) > 1) {
+          return res.status(409).json({
+            error: 'Prices have changed since you opened the menu. Please refresh the page and check your order.',
+            total: int(t.total)
+          })
+        }
+
         const row = {
           id: newOrderId(),
           mode,
@@ -156,25 +198,20 @@ export default async function handler(req, res) {
           // Online orders stay `pending` and out of the manager queue until
           // PayHere confirms; everything else is simply due on handover.
           payment_status: paymentType === 'online' ? 'pending' : 'due',
-          address: body.address || null,
-          location: body.location || null,
-          delivery_distance_km: body.deliveryDistanceKm != null ? num(body.deliveryDistanceKm) : null,
-          out_of_zone: !!body.outOfZone,
+          address: mode === 'delivery' ? body.address || null : null,
+          location,
+          delivery_distance_km: priced.deliveryDistanceKm,
+          out_of_zone: priced.outOfZone,
           requested_time: body.time || null,
           notes: body.notes || null,
-          items: items.map((i) => ({
-            id: i.id,
-            name: i.name,
-            price: int(i.price),
-            qty: int(i.qty)
-          })),
-          subtotal: int(body.subtotal),
-          discount_amount: int(body.discountAmount),
-          discount_percent: num(body.discountPercent),
-          service_charge: int(body.serviceCharge),
-          service_charge_percent: num(body.serviceChargePercent),
-          delivery_fee: int(body.deliveryFee),
-          total: int(body.total)
+          items: priced.items,
+          subtotal: int(t.subtotal),
+          discount_amount: int(t.discountAmount),
+          discount_percent: t.discountPercent,
+          service_charge: int(t.serviceCharge),
+          service_charge_percent: t.serviceChargePercent,
+          delivery_fee: int(t.deliveryFee),
+          total: int(t.total)
         }
 
         const { data, error } = await supabase.from('orders').insert(row).select('*').single()
@@ -189,6 +226,15 @@ export default async function handler(req, res) {
           toStatus: 'placed',
           detail: `${data.mode} · ${itemCount} item${itemCount === 1 ? '' : 's'}`
         })
+
+        // Loyalty is counted here, from the order we just priced, so the
+        // public customers API can't be used to climb tiers. Best-effort:
+        // a failure here must not lose a placed order.
+        if (priced.phone) {
+          await countVisit(supabase, priced.phone, row.total).catch((err) =>
+            console.error('visit count failed:', data.id, err)
+          )
+        }
 
         // Best-effort: keep reception's email alert alive until the manager
         // console lands. Never fails the order.

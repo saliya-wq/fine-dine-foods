@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { normalizePhone } from '../lib/phone.js'
 
 const URL = process.env.SUPABASE_URL
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -18,18 +19,6 @@ const toCustomer = (r) =>
         location: r.location || ''
       }
     : null
-
-// Reuse the same normaliser as the client so ids are consistent.
-const normalizePhone = (raw) => {
-  const digits = String(raw || '').replace(/\D/g, '')
-  if (!digits) return null
-  let local
-  if (digits.startsWith('94') && digits.length === 11) local = digits.slice(2)
-  else if (digits.startsWith('0') && digits.length === 10) local = digits.slice(1)
-  else if (digits.length === 9) local = digits
-  else return null
-  return '+94' + local
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -74,15 +63,13 @@ export default async function handler(req, res) {
       }
       case 'recordOrder': {
         const phone = normalizePhone(body.phone)
-        const amount = Number(body.amount) || 0
         if (!phone) return res.status(400).json({ error: 'Invalid phone.' })
         const { data: existing } = await supabase.from('customers').select('*').eq('phone', phone).maybeSingle()
         if (!existing) return res.status(200).json({ customer: null })
-        const update = {
-          visits: existing.visits + 1,
-          total_spent: existing.total_spent + amount,
-          last_seen: new Date().toISOString()
-        }
+        // Visits and spend are counted by api/orders `place` from the
+        // server-priced order. This endpoint is public, so it must not move
+        // them, or anyone could call it repeatedly to climb loyalty tiers.
+        const update = { last_seen: new Date().toISOString() }
         // Remember delivery details for next time (only overwrite when provided).
         const address = (body.address || '').trim()
         const location = (body.location || '').trim()
